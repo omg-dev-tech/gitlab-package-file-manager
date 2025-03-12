@@ -15,7 +15,7 @@ run_main:
     - funky-docker
   script:
     - go mod download   # 모듈을 미리 다운로드합니다.
-    - go run main.go -token $TOKEN -info $PACKAGE_INFO -remain $REMAIN
+    - go run main.go -token $TOKEN -info "$PACKAGE_INFO" -remain $REMAIN
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
       when: always
