@@ -19,7 +19,7 @@ type FileInfo struct {
 	PVID      int
 }
 
-func GetAllAsset(git *gitlab.Client, pid int, pvid int) []FileInfo {
+func GetAllAsset(git *gitlab.Client, pid int, pvid int, remain int) []FileInfo {
 	totalItem := getTotalItem(git, pid, pvid)
 	perPage := 100
 	var fileList []FileInfo
@@ -51,10 +51,10 @@ func GetAllAsset(git *gitlab.Client, pid int, pvid int) []FileInfo {
 	})
 
 	var filesToDelete []FileInfo
-	if len(fileList) > 12 {
-		filesToDelete = fileList[12:]
+	if len(fileList) > remain {
+		filesToDelete = fileList[remain:]
 	} else {
-		log.Println("삭제 대상 파일이 없습니다. (전체 파일 수가 12개 이하)")
+		log.Printf("삭제 대상 파일이 없습니다. (전체 파일 수가 %v개 이하)", remain)
 		return []FileInfo{}
 	}
 	log.Printf("Files to delete: %d", len(filesToDelete))

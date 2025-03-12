@@ -3,12 +3,19 @@ image: golang:1.24.1-alpine3.21
 stages:
   - run
 
+cache:
+  key: "$CI_COMMIT_REF_SLUG"  # 브랜치 별로 캐시를 관리합니다.
+  paths:
+    - /go/pkg/mod
+    - .cache/go-build
+
 run_main:
   stage: run
   tags:
     - funky-docker
   script:
-    - go run main.go -token $TOKEN -info '$PACKAGE_INFO'
+    - go mod download   # 모듈을 미리 다운로드합니다.
+    - go run main.go -token $TOKEN -info $PACKAGE_INFO -remain $REMAIN
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
       when: always

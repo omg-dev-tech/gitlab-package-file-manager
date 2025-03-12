@@ -19,6 +19,7 @@ func main() {
 
 	token := flag.String("token", "", "API 인증 토큰")
 	jsonInput := flag.String("info", "", "JSON 형식의 입력 (예: '{\"key\":\"value\"}')")
+	remain := flag.Int("remain", 12, "유지할 최신 파일의 개수")
 
 	flag.Parse()
 
@@ -54,7 +55,7 @@ func main() {
 		for _, pvid := range projectInfo.PVID {
 
 			// 633, 5779
-			deleteList = append(deleteList, utils.GetAllAsset(client, projectInfo.PID, pvid)...)
+			deleteList = append(deleteList, utils.GetAllAsset(client, projectInfo.PID, pvid, *remain)...)
 		}
 	}
 
