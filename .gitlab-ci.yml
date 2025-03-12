@@ -6,8 +6,8 @@ stages:
 cache:
   key: "$CI_COMMIT_REF_SLUG"  # 브랜치 별로 캐시를 관리합니다.
   paths:
-    - /go/pkg/mod
-    - .cache/go-build
+    - $GOPATH/pkg/mod
+    - $HOME/.cache/go-build
 
 run_main:
   stage: run
