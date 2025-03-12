@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"gitlab-asset-monitoring/utils"
+	"gitlab-asset-cleaner/utils"
 	"log"
 	"sync"
 
