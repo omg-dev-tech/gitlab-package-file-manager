@@ -1,0 +1,15 @@
+image: golang:1.24.1-alpine3.21
+
+stages:
+  - run
+
+run_main:
+  stage: run
+  tags:
+    - funky-docker
+  script:
+    - go run main.go -token $TOKEN -info '$PACKAGE_INFO'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: always
+    - when: never
