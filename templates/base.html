@@ -1,0 +1,66 @@
+{{ define "content" }}
+<h1>GitLab 프로젝트 조회</h1>
+<form action="/search" method="post" class="mb-4">
+    <div class="form-group">
+        <label for="token">Token 입력</label>
+        <input type="text" class="form-control" id="token" name="token" placeholder="GitLab API 토큰 입력" value="{{ .Token }}">
+    </div>
+    <button type="submit" class="btn btn-primary">조회</button>
+</form>
+
+{{ if .Message }}
+<div class="alert alert-info">{{ .Message }}</div>
+{{ end }}
+
+{{ if .Projects }}
+<div class="accordion" id="projectAccordion">
+    {{ range $i, $project := .Projects }}
+    <div class="card">
+        <div class="card-header" id="heading{{ $i }}">
+            <h2 class="mb-0 d-flex justify-content-between align-items-center">
+                <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapse{{ $i }}" aria-expanded="true" aria-controls="collapse{{ $i }}">
+                    {{ $project.Name }} ({{ $project.AccessLevel }})
+                </button>
+                <!-- 삭제와 같은 추가 버튼들을 이 영역에 배치 가능 -->
+            </h2>
+        </div>
+
+        <div id="collapse{{ $i }}" class="collapse" aria-labelledby="heading{{ $i }}" data-parent="#projectAccordion">
+            <div class="card-body">
+                <h5>패키지 레지스트리</h5>
+                <ul class="list-group">
+                    {{ range $registry := $project.Registries }}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ $registry.Name }} - Total Items: <span id="registry-{{ $registry.ID }}">{{ $registry.TotalItem }}</span>
+                        <button class="btn btn-danger btn-sm ml-3 delete-registry" data-registry-id="{{ $registry.ID }}">삭제</button>
+                    </li>
+                    {{ end }}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {{ end }}
+</div>
+{{ end }}
+{{ end }}
+
+{{ define "script" }}
+<script>
+$(document).ready(function(){
+    $('.delete-registry').click(function(){
+        var registryId = $(this).data('registry-id');
+        // AJAX로 삭제 요청
+        $.post("/delete_registry", { registry_id: registryId }, function(response) {
+            if(response.success) {
+                alert(response.message);
+                // 실제 구현 시: 삭제 후 전체 데이터를 다시 조회하거나 해당 항목의 total item 값을 업데이트 처리
+                // 예시) $('#registry-' + registryId).text(newTotalItem);
+                location.reload(); // 간단하게 페이지 리로딩
+            } else {
+                alert("삭제 실패");
+            }
+        });
+    });
+});
+</script>
+{{ end }}

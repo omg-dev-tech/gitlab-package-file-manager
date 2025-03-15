@@ -1,90 +1,81 @@
 package main
 
 import (
-	"encoding/json"
-	"flag"
-	"gitlab-asset-cleaner/utils"
-	"log"
-	"sync"
+	"html/template"
+	"io"
+	"net/http"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
-type ProjectInfo struct {
-	PID  int
-	PVID []int
+type TemplateRenderer struct {
+	templates *template.Template
+}
+
+func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+	return t.templates.ExecuteTemplate(w, name, data)
+}
+
+type Project struct {
+	ProjectId          int
+	ProjectName        string
+	ProjectAccessLevel int
+	Packages           []Package
+}
+
+type Package struct {
+	PackageId    int
+	PackageName  string
+	PackageFiles []PackageFile
+}
+
+type PackageFile struct {
+	PackageFileId   int
+	PackageFileName string
+}
+
+type PageData struct {
+	Token    string
+	Projects []Project
+	Message  string
 }
 
 func main() {
+	e := echo.New()
 
-	token := flag.String("token", "", "API 인증 토큰")
-	jsonInput := flag.String("info", "", "JSON 형식의 입력 (예: '{\"key\":\"value\"}')")
-	remain := flag.Int("remain", 12, "유지할 최신 파일의 개수")
+	// 미들웨어 설정 (로깅, Recover 등)
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 
-	flag.Parse()
-
-	if *token == "" {
-		log.Fatalln("토큰 값은 필수입니다.")
-		return
+	// 템플릿 렌더러 설정
+	renderer := &TemplateRenderer{
+		templates: template.Must(template.ParseGlob("templates/*.html")),
 	}
+	e.Renderer = renderer
 
-	if *jsonInput == "" {
-		log.Fatalln("알맞은 프로젝트 정보를 입력하세요.")
-		return
-	}
-	var projectInfoList []ProjectInfo
-	if err := json.Unmarshal([]byte(*jsonInput), &projectInfoList); err != nil {
-		log.Fatalf("JSON 파싱 중 오류 발생: %v", err)
-	}
+	// GET: 토큰 입력 및 조회 폼 표시
+	e.GET("/", func(c echo.Context) error {
+		data := PageData{}
+		return c.Render(http.StatusOK, "index.html", data)
+	})
 
-	log.Println("Asset Delete Start!!")
+	// POST: 토큰이 권한을 가지고 있는 모든 프로젝트
+	e.POST("/search", func(c echo.Context) error {
+		token := c.FormValue("token")
+		// baseUrl := c.FormValue("base-url")
+		baseUrl := "https://git.bwg.co.kr/gitlab/api/v4"
 
-	baseURL := "https://git.bwg.co.kr/gitlab/api/v4"
-	client, err := gitlab.NewClient(*token, gitlab.WithBaseURL(baseURL))
-	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
-	}
-
-	log.Println("Client is connected")
-
-	var deleteList []utils.FileInfo
-	for _, projectInfo := range projectInfoList {
-
-		// calculate total page
-
-		for _, pvid := range projectInfo.PVID {
-
-			// 633, 5779
-			deleteList = append(deleteList, utils.GetAllAsset(client, projectInfo.PID, pvid, *remain)...)
+		projects := Search(token, baseUrl)
+		data := PageData{
+			Token:    token,
+			Projects: projects,
+			Message:  "조회가 완료되었습니다.",
 		}
-	}
 
-	// 삭제를 위한 채널에 삭제할 파일 ID를 넣습니다.
-	fileChan := make(chan utils.FileInfo, len(deleteList))
-	for _, file := range deleteList {
-		fileChan <- file
-	}
-	close(fileChan)
+		return c.Render(http.StatusOK, "index.html", data)
 
-	var deleteWg sync.WaitGroup
-	numDeleteWorkers := 10
-	for i := 0; i < numDeleteWorkers; i++ {
-		deleteWg.Add(1)
-		go func(workerID int) {
-			defer deleteWg.Done()
-			for file := range fileChan {
-				// 삭제 API 호출 (예: DeletePackageFile 함수 사용)
-				_, err := client.Packages.DeletePackageFile(file.PID, file.PVID, file.ID, nil)
-				if err != nil {
-					log.Printf("[Worker %d] Error deleting file %d: %v", workerID, file.ID, err)
-				} else {
-					log.Printf("[Worker %d] Successfully deleted file %d", workerID, file.ID)
-				}
-			}
-		}(i)
-	}
+	})
 
-	deleteWg.Wait()
-	log.Println("Deletion process completed.")
-
+	e.Logger.Fatal(e.Start(":8080"))
 }
