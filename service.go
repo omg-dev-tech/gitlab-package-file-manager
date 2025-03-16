@@ -3,7 +3,6 @@ package main
 import (
 	"gitlab-asset-cleaner/utils"
 	"log"
-	"sync"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
@@ -24,22 +23,23 @@ func Search(token string, baseUrl string) []Project {
 	resultC := utils.New(func(inC chan interface{}) {
 		defer close(inC)
 		// 패키지 정보를 channel 에 넣어줌
-		projects := getProjects()
+		projects, err := getProjects()
+		if err != nil {
+			log.Fatalf("Failed to get projects: %v", err)
+		}
 
 		for project := range projects {
 			inC <- project
 		}
 
-	}).Pipe()
+	}).Pipe(getPackagesExecutor).Merge()
 
-	// 두번째 파이프라인 정의
+	resultList := <-resultC
 
-	// 세번째 파이프라인 정의
-
-	return resultList
+	return resultList.([]Project)
 }
 
-func getProjects() []Project {
+func getProjects() ([]Project, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -90,14 +90,14 @@ func getProjects() []Project {
 			})
 		}
 	}
-	return results
+	return results, nil
 }
 
 func getPackagesExecutor(input interface{}) (interface{}, error) {
 
 	project := input.(Project)
 
-	packageC := make(chan []interface{})
+	var packageList []Package
 
 	_, resp, _ := client.Packages.ListProjectPackages(project.ProjectId, &gitlab.ListProjectPackagesOptions{
 		ListOptions: gitlab.ListOptions{
@@ -115,66 +115,21 @@ func getPackagesExecutor(input interface{}) (interface{}, error) {
 		})
 
 		for _, p := range packages {
-			packageC <- []interface{}{project.ProjectId, p}
-		}
-
-	}
-
-	var wg sync.WaitGroup
-	numWorkers := 10
-
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(i)
-
-		go func() {
-			defer wg.Done()
-			for info := range packageC {
-				projectId := info[0].(int)
-				packageInfo := info[1].(gitlab.Package)
-				_, resp, _ := client.Packages.ListPackageFiles(projectId, packageInfo.ID, &gitlab.ListPackageFilesOptions{
-					PerPage: 1,
-				})
-
-				for j := range (resp.TotalItems / 100) + 1 {
-					packageFile, _, _ := client.Packages.ListPackageFiles(projectId, packageInfo.ID, &gitlab.ListPackageFilesOptions{
-						PerPage: 100,
-						Page:    j,
-					})
-
-				}
-			}
-		}()
-	}
-	// channel 에 넣기
-
-	return _, nil
-}
-
-func listProjectPackages(projectId int) {
-	var resultList []Registry
-	// get one to use one
-	_, resp, _ := client.Packages.ListProjectPackages(projectId, &gitlab.ListProjectPackagesOptions{
-		ListOptions: gitlab.ListOptions{
-			PerPage: 1,
-		},
-	})
-	totalItems := resp.TotalItems
-
-	for i := range (totalItems / 100) + 1 {
-		packageLists, _, _ := client.Packages.ListProjectPackages(projectId, &gitlab.ListProjectPackagesOptions{
-			ListOptions: gitlab.ListOptions{
-				PerPage: 100,
-				Page:    i,
-			},
-		})
-
-		for _, onePackage := range packageLists {
-			resultList = append(resultList, Registry{
-				ID:        onePackage.ID,
-				Name:      onePackage.Name,
-				TotalItem: onePackage,
+			_, resp, _ := client.Packages.ListPackageFiles(project.ProjectId, p.ID, &gitlab.ListPackageFilesOptions{
+				PerPage: 1,
 			})
+			totalPackageFileCount := resp.TotalItems
+
+			packageList = append(packageList, Package{
+				PackageId:         p.ID,
+				PackageName:       p.Name,
+				TotalPackageFiles: totalPackageFileCount,
+			})
+
 		}
 	}
 
+	project.Packages = packageList
+
+	return project, nil
 }

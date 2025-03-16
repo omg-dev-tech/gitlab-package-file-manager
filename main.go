@@ -25,9 +25,9 @@ type Project struct {
 }
 
 type Package struct {
-	PackageId    int
-	PackageName  string
-	PackageFiles []PackageFile
+	PackageId         int
+	PackageName       string
+	TotalPackageFiles int
 }
 
 type PackageFile struct {
