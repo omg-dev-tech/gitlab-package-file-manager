@@ -1,5 +1,7 @@
 package utils
 
+import "sync"
+
 type Executor func(interface{}) (interface{}, error)
 type Pipeline interface {
 	Pipe(executor Executor) Pipeline
@@ -39,16 +41,30 @@ func run(
 	outC := make(chan interface{})
 	errC := make(chan error)
 
+	workerCount := 10
+	var wg sync.WaitGroup
+
 	go func() {
 		defer close(outC)
-		for v := range inC {
-			res, err := f(v)
-			if err != nil {
-				errC <- err
-				continue
-			}
-			outC <- res
+		defer close(errC)
+
+		for i := 0; i < workerCount; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for v := range inC {
+					res, err := f(v)
+					if err != nil {
+						errC <- err
+						continue
+					}
+					outC <- res
+				}
+			}()
 		}
+
+		wg.Wait()
+
 	}()
 	return outC, errC
 }

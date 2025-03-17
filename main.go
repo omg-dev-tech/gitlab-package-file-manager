@@ -3,6 +3,7 @@ package main
 import (
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -36,9 +37,8 @@ type PackageFile struct {
 }
 
 type PageData struct {
-	Token    string
-	Projects []Project
-	Message  string
+	Data    interface{}
+	Message string
 }
 
 func main() {
@@ -54,6 +54,9 @@ func main() {
 	}
 	e.Renderer = renderer
 
+	var token string
+	baseUrl := "https://git.bwg.co.kr/gitlab/api/v4"
+
 	// GET: 토큰 입력 및 조회 폼 표시
 	e.GET("/", func(c echo.Context) error {
 		data := PageData{}
@@ -62,18 +65,32 @@ func main() {
 
 	// POST: 토큰이 권한을 가지고 있는 모든 프로젝트
 	e.POST("/search", func(c echo.Context) error {
-		token := c.FormValue("token")
-		// baseUrl := c.FormValue("base-url")
-		baseUrl := "https://git.bwg.co.kr/gitlab/api/v4"
+		token = c.FormValue("token")
 
 		projects := Search(token, baseUrl)
 		data := PageData{
-			Token:    token,
-			Projects: projects,
-			Message:  "조회가 완료되었습니다.",
+
+			Data:    projects,
+			Message: "조회가 완료되었습니다.",
 		}
 
 		return c.Render(http.StatusOK, "index.html", data)
+
+	})
+
+	e.POST("/delete_package", func(c echo.Context) error {
+
+		projectId := c.FormValue("project_id")
+		packageId := c.FormValue("package_id")
+
+		log.Printf("delete package 호출 - projectId: %v, packageId: %v", projectId, packageId)
+
+		response := PageData{
+			Data:    "",
+			Message: DeletePackageFiles(token, baseUrl, projectId, packageId),
+		}
+
+		return c.Render(http.StatusOK, "index.html", response)
 
 	})
 

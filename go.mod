@@ -2,13 +2,15 @@ module gitlab-asset-cleaner
 
 go 1.24.1
 
-require gitlab.com/gitlab-org/api/client-go v0.124.0
+require (
+	github.com/labstack/echo/v4 v4.13.3
+	gitlab.com/gitlab-org/api/client-go v0.124.0
+)
 
 require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
-	github.com/labstack/echo/v4 v4.13.3 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
