@@ -34,19 +34,16 @@ func Search(token string, baseUrl string) []Project {
 		}
 
 		for _, project := range projects {
-			log.Printf("프로젝트 입력 <- %v", project)
 			inC <- project
 		}
-
-		log.Printf("파이프라인 종료")
 
 	}).Pipe(getPackagesExecutor).Merge()
 
 	var resultList []Project
 	for result := range resultC {
-		if project, ok := result.(Project); ok {
+		if projects, ok := result.([]Project); ok {
 			log.Printf("result <- %v", result)
-			resultList = append(resultList, project)
+			resultList = append(resultList, projects...)
 		}
 	}
 
@@ -110,10 +107,8 @@ func getProjects() ([]Project, error) {
 }
 
 func getPackagesExecutor(input interface{}) (interface{}, error) {
-	log.Println("파이프라인 시작")
 	project := input.(Project)
-	log.Printf("Project의 Package 정보 조회: %v", project)
-	var packageList []Package
+	var resultList []Project
 
 	_, resp, _ := client.Packages.ListProjectPackages(project.ProjectId, &gitlab.ListProjectPackagesOptions{
 		ListOptions: gitlab.ListOptions{
@@ -134,20 +129,19 @@ func getPackagesExecutor(input interface{}) (interface{}, error) {
 			_, resp, _ := client.Packages.ListPackageFiles(project.ProjectId, p.ID, &gitlab.ListPackageFilesOptions{
 				PerPage: 1,
 			})
-			totalPackageFileCount := resp.TotalItems
 
-			packageList = append(packageList, Package{
-				PackageId:         p.ID,
-				PackageName:       p.Name,
-				TotalPackageFiles: totalPackageFileCount,
+			resultList = append(resultList, Project{
+				ProjectId:          project.ProjectId,
+				ProjectName:        project.ProjectName,
+				ProjectAccessLevel: project.ProjectAccessLevel,
+				PackageId:          p.ID,
+				PackageName:        p.Name,
+				TotalPackageFiles:  resp.TotalItems,
 			})
-
 		}
 	}
 
-	project.Packages = packageList
-	log.Printf("Project의 Package 정보 완료: %v", project)
-	return project, nil
+	return resultList, nil
 }
 
 func DeletePackageFiles(token string, baseUrl string, projectId string, packageId string) string {

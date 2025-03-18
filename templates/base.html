@@ -52,8 +52,8 @@ $(document).ready(function(){
         var packageId = $(this).data('package-id');
         // AJAX로 삭제 요청
         $.post("/delete_package", { project_id: projectId ,package_id: packageId }, function(response) {
-            if(response) {
-                alert(response);
+            if(response.Message) {
+                alert(response.Message);
                 // 실제 구현 시: 삭제 후 전체 데이터를 다시 조회하거나 해당 항목의 total item 값을 업데이트 처리
                 // 예시) $('#package-' + packageId).text(newTotalItem);
                 location.reload(); // 간단하게 페이지 리로딩

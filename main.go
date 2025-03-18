@@ -22,7 +22,9 @@ type Project struct {
 	ProjectId          int
 	ProjectName        string
 	ProjectAccessLevel int
-	Packages           []Package
+	PackageId          int
+	PackageName        string
+	TotalPackageFiles  int
 }
 
 type Package struct {
