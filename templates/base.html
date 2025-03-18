@@ -19,25 +19,12 @@
         <div class="card-header" id="heading{{ $i }}">
             <h2 class="mb-0 d-flex justify-content-between align-items-center">
                 <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapse{{ $i }}" aria-expanded="true" aria-controls="collapse{{ $i }}">
-                    {{ $project.ProjectName }} ({{ $project.ProjectAccessLevel }})
+                    {{ $project.ProjectName }} ({{ $project.PackageName }}: {{ $project.TotalPackageFiles }})
                 </button>
                 <!-- 삭제와 같은 추가 버튼들을 이 영역에 배치 가능 -->
             </h2>
         </div>
 
-        <div id="collapse{{ $i }}" class="collapse" aria-labelledby="heading{{ $i }}" data-parent="#projectAccordion">
-            <div class="card-body">
-                <h5>패키지 레지스트리</h5>
-                <ul class="list-group">
-                    {{ range $package := $project.Packages }}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        {{ $package.PackageName }} - Total Items: <span id="package-{{ $package.PackageId }}">{{ $package.TotalPackageFiles }}</span>
-                        <button class="btn btn-danger btn-sm ml-3 delete-package" data-package-id="{{ $package.PackageId }}" data-project-id="{{ $project.ProjectId}}">삭제</button>
-                    </li>
-                    {{ end }}
-                </ul>
-            </div>
-        </div>
     </div>
     {{ end }}
 </div>
