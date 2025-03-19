@@ -27,33 +27,40 @@
     <script>
       $(document).ready(function () {
         $("#delete-package").click(function () {
+          // 체크된 행 선택
+          var selectedRows = $("input[name='selectRow']:checked").map(function() {
+            var row = $(this).closest('tr');
+            return {
+              projectId: row.find('.projectId').val(),
+              packageId: row.find('.packageId').val(),
+            };
+          }).get();
 
-          // get all selected
-          var selectedRows = $("input[checked='true']").toArray().map(
-            element => ({
-            projectId: element.parentElement().parentElement().find(".projectId").textContent,
-            packageId: element.parentElement().parentElement().find(".packageId").textContent,
+          console.log("선택된 항목:", selectedRows);
 
-          }))
-
-          console.log("selectedRows: " + selectedRows)
-
+          if (selectedRows.length === 0) {
+            alert("삭제할 항목을 선택해주세요.");
+            return;
+          }
 
           // AJAX로 삭제 요청
-        //   $.post(
-        //     "/delete_package",
-        //     { input: selectedRows },
-        //     function (response) {
-        //       if (response.Message) {
-        //         alert(response.Message);
-        //         // 실제 구현 시: 삭제 후 전체 데이터를 다시 조회하거나 해당 항목의 total item 값을 업데이트 처리
-        //         // 예시) $('#package-' + packageId).text(newTotalItem);
-        //         location.reload(); // 간단하게 페이지 리로딩
-        //       } else {
-        //         alert("삭제 실패");
-        //       }
-        //     }
-        //   );
+          // $.ajax({
+          //   url: "/delete_package",
+          //   type: "POST",
+          //   contentType: "application/json",
+          //   data: JSON.stringify({ packages: selectedRows }),
+          //   success: function(response) {
+          //     if (response.Message) {
+          //       alert(response.Message);
+          //       location.reload();
+          //     } else {
+          //       alert("삭제 실패");
+          //     }
+          //   },
+          //   error: function(xhr, status, error) {
+          //     alert("오류가 발생했습니다: " + error);
+          //   }
+          // });
         });
       });
       $(document).ready(function() {
@@ -113,7 +120,11 @@
                         {{ else }}
                         <tr class="text-dark">
                         {{ end }}
-                            <td><input type="checkbox" name="selectRow"></td>
+                            <td>
+                              <input type="checkbox" name="selectRow">
+                              <input type="hidden" class="projectId" value="{{ $project.ProjectId }}">
+                              <input type="hidden" class="packageId" value="{{ $project.PackageId }}">
+                            </td>
                             <td class="projectName">{{ $project.ProjectName }}</td>
                             <td class="packageName">{{ $project.PackageName }}</td>
                             <td class="totalPackageFiles">{{ $project.TotalPackageFiles }}</td>
