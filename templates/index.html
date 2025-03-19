@@ -1,23 +1,128 @@
 <!DOCTYPE html>
 <html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ block "title" . }}GitLab 프로젝트 조회{{ end }}</title>
+  <head>
+    <meta charset="UTF-8" />
+    <title>GitLab 프로젝트 조회</title>
     <!-- Bootstrap CSS (CDN 또는 /static/css/bootstrap.min.css) -->
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <!-- Optional: Bootstrap JS와 jQuery -->
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+    />
+    <link href="//cdn.jsdelivr.net/gh/wan2land/d2coding/d2coding-full.css" rel="stylesheet" />
+    <style>
+        * {
+            font-family: D2Coding !important;
+        }
+    </style>
     <script
-  src="https://code.jquery.com/jquery-3.7.1.js"
-  integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4="
-  crossorigin="anonymous"></script>
+      src="https://code.jquery.com/jquery-3.7.1.js"
+      integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4="
+      crossorigin="anonymous"
+    ></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" 
+        crossorigin="anonymous"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
-    {{ block "head" . }}{{ end }}
-</head>
-<body>
-    <div class="container mt-4">
-        {{ block "content" . }}{{ end }}
+    <script>
+      $(document).ready(function () {
+        $("#delete-package").click(function () {
+
+          // get all selected
+          var selectedRows = $("input[checked='true']").toArray().map(
+            element => ({
+            projectId: element.parentElement().parentElement().find(".projectId").textContent,
+            packageId: element.parentElement().parentElement().find(".packageId").textContent,
+
+          }))
+
+          console.log("selectedRows: " + selectedRows)
+
+
+          // AJAX로 삭제 요청
+        //   $.post(
+        //     "/delete_package",
+        //     { input: selectedRows },
+        //     function (response) {
+        //       if (response.Message) {
+        //         alert(response.Message);
+        //         // 실제 구현 시: 삭제 후 전체 데이터를 다시 조회하거나 해당 항목의 total item 값을 업데이트 처리
+        //         // 예시) $('#package-' + packageId).text(newTotalItem);
+        //         location.reload(); // 간단하게 페이지 리로딩
+        //       } else {
+        //         alert("삭제 실패");
+        //       }
+        //     }
+        //   );
+        });
+      });
+      $(document).ready(function() {
+        $("#selectAll").click(function() {
+        $("input[name='selectRow']").prop("checked", this.checked);
+        });
+    });
+    </script>
+    
+    
+  </head>
+  <body>
+    <!-- 검색 영역 -->
+    <div class="container">
+        
+        <form action="/search" method="post" class="mb-4">
+            <div class="pb-2 mt-4 mb-2 border-bottom">
+                <h1>GitLab 프로젝트 조회</h1>
+            </div >
+
+            <div class="row">
+                <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-2">
+                    <label for="token" class="form-label fw-bold">Token 입력</label>
+                    <input id="token" name="token" type="password" class="form-control">
+                </div>
+                <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-2">
+                    <label for="baseUrl" class="form-label fw-bold">Base URL 입력</label>
+                    <input id="baseUrl" name="baseUrl" type="text" class="form-control">
+                </div>
+
+            </div>
+        
+            <button type="submit" id="search" class="btn btn-primary">조회</button>
+            <button type="button" id="delete-package" class="btn btn-danger">삭제</button>
+          </form>
     </div>
 
-    {{ block "script" . }}{{ end }}
-</body>
+    <!-- 테이블 영역 -->
+    <div class="container mb-4">
+
+        <!-- <div class="table" > -->
+            <table class="table table-bordered table-hover">
+                <thead class="thead-light">
+                    <tr>
+                      <th scope="col"><input type="checkbox" id="selectAll"></th>
+                      <!-- <th scope="col">Index</th> -->
+                      <th scope="col">프로젝트 명</th>
+                      <th scope="col">패키지 명</th>
+                      <th scope="col">패키지 파일 총 개수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {{ if .Data }}
+                    {{ range $i, $project := .Data }}
+                        {{ if gt $project.TotalPackageFiles 20 }}
+                        <tr class="text-danger">
+                        {{ else }}
+                        <tr class="text-dark">
+                        {{ end }}
+                            <td><input type="checkbox" name="selectRow"></td>
+                            <td class="projectName">{{ $project.ProjectName }}</td>
+                            <td class="packageName">{{ $project.PackageName }}</td>
+                            <td class="totalPackageFiles">{{ $project.TotalPackageFiles }}</td>
+                        </tr>  
+                    {{ end }}
+                    {{ end }}
+                  </tbody>
+            </table>
+        <!-- </div> -->
+    </div>
+  </body>
 </html>

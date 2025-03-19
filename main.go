@@ -57,7 +57,7 @@ func main() {
 	e.Renderer = renderer
 
 	var token string
-	baseUrl := "https://git.bwg.co.kr/gitlab/api/v4"
+	var baseUrl string
 
 	// GET: 토큰 입력 및 조회 폼 표시
 	e.GET("/", func(c echo.Context) error {
@@ -68,10 +68,10 @@ func main() {
 	// POST: 토큰이 권한을 가지고 있는 모든 프로젝트
 	e.POST("/search", func(c echo.Context) error {
 		token = c.FormValue("token")
+		baseUrl = c.FormValue("baseUrl")
 
 		projects := Search(token, baseUrl)
 		data := PageData{
-
 			Data:    projects,
 			Message: "조회가 완료되었습니다.",
 		}
