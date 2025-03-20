@@ -30,9 +30,10 @@
       }
       .form-signin {
         width: 100%;
-        max-width: 330px;
+        max-width: 450px;
         padding: 15px;
         margin: auto;
+        text-align: center;
       }
       .form-signin .checkbox {
         font-weight: 400;
@@ -86,19 +87,10 @@
   </head>
   <body class="d-flex align-items-center py-4 bg-body-tertiary">
     <main class="form-signin w-100 m-auto">
-      <form
-        id="login"
-        action="/login"
-        method="POST"
-        class="form-signin"
-        novalidate="novalidate"
-      >
-        <input
-          type="hidden"
-          name="_csrf"
-          value="b8YJzSzhNtOFx4KT2q_RswTyQqY9WH1NDCd7zgJar9znr-gsDaMw9UqFV-Co8-er6YLlgzPDb54NOxxgaBND_GZvm-_Un94U"
-        />
-        <img class="mb-4" src="/favicon.png" width="266" alt="" />
+      <form id="login" action="/login" method="POST" class="form-signin">
+        <div class="text-center">
+          <img class="mb-4" src="/favicon.png" width="266" alt="" />
+        </div>
         <h1 class="h3 mb-3 fw-normal">GitLab Package File Manager</h1>
         <div class="form-floating">
           <label for="floatingInput">Gitlab API URL</label>

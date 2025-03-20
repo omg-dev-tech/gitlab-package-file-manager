@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 
@@ -51,6 +52,9 @@ func main() {
 	// Set middleware for session
 	e.Use(session.Middleware(sessions.NewCookieStore([]byte("super-secret-key"))))
 
+	// CSRF 미들웨어 제거 또는 비활성화
+	// e.Use(middleware.CSRF()) <- 이런 코드가 있다면 제거
+
 	// Set Template Renderer
 	renderer := &TemplateRenderer{
 		templates: template.Must(template.ParseGlob("templates/*.html")),
@@ -75,6 +79,8 @@ func main() {
 		data := Response{}
 		token := c.FormValue("token")
 		baseUrl := c.FormValue("baseUrl")
+
+		log.Printf("baseUrl: %v, token: %v", baseUrl, token)
 
 		if baseUrl == "" || token == "" {
 			data.Message = "Gitlab API URL and Private Token should exist"
