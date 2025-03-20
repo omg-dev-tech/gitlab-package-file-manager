@@ -3,47 +3,39 @@ package main
 import (
 	"gitlab-asset-cleaner/utils"
 	"log"
-	"sort"
-	"strconv"
-	"sync"
+	"time"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-var client *gitlab.Client
-var err error
+type Project struct {
+	ProjectId          int
+	ProjectName        string
+	ProjectAccessLevel int
+	ProjectLink        string
+	PackageId          int
+	PackageName        string
+	PackageLink        string
+	TotalPackageFiles  int
+	CreatedAt          *time.Time
+}
 
-func Search(token string, baseUrl string) []Project {
+func Search(client *gitlab.Client) []Project {
 	// 연결을 위한 client 초기화
-	client, err = gitlab.NewClient(token, gitlab.WithBaseURL(baseUrl))
-	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
-	}
 	log.Printf("서비스 시작")
 	log.Println("Client is connected")
 
 	// 첫번째 파이프라인 정의 packages 조회 후 다음 파이프라인 채널로..
 	resultC := utils.New(func(inC chan interface{}) {
-		defer close(inC)
-		log.Printf("파이프라인 시작")
-		// 패키지 정보를 channel 에 넣어줌
-		projects, err := getProjects()
-		log.Printf("프로젝트 정보 조회 %v 건 완료", len(projects))
-		if err != nil {
-			log.Fatalf("Failed to get projects: %v", err)
-		}
-
-		for _, project := range projects {
-			inC <- project
-		}
-
-	}).Pipe(getPackagesExecutor).Merge()
+		inC <- nil
+		close(inC)
+	}, client).Pipe(getProjectexecutor).Pipe(getPackagesExecutor).Merge()
 
 	var resultList []Project
 	for result := range resultC {
-		if projects, ok := result.([]Project); ok {
+		if project, ok := result.(Project); ok {
 			log.Printf("result <- %v", result)
-			resultList = append(resultList, projects...)
+			resultList = append(resultList, project)
 		}
 	}
 
@@ -52,10 +44,8 @@ func Search(token string, baseUrl string) []Project {
 	return resultList
 }
 
-func getProjects() ([]Project, error) {
-	if err != nil {
-		return nil, err
-	}
+func getProjectexecutor(input interface{}, client *gitlab.Client) (interface{}, error) {
+
 	var results []Project
 
 	_, resp, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
@@ -100,14 +90,17 @@ func getProjects() ([]Project, error) {
 				ProjectId:          p.ID,
 				ProjectName:        p.Name,
 				ProjectAccessLevel: accessLevel,
+				ProjectLink:        p.WebURL,
 			})
 		}
 	}
+
 	return results, nil
 }
 
-func getPackagesExecutor(input interface{}) (interface{}, error) {
+func getPackagesExecutor(input interface{}, client *gitlab.Client) (interface{}, error) {
 	project := input.(Project)
+	log.Printf("Project: %v", project)
 	var resultList []Project
 
 	_, resp, _ := client.Packages.ListProjectPackages(project.ProjectId, &gitlab.ListProjectPackagesOptions{
@@ -134,78 +127,81 @@ func getPackagesExecutor(input interface{}) (interface{}, error) {
 				ProjectId:          project.ProjectId,
 				ProjectName:        project.ProjectName,
 				ProjectAccessLevel: project.ProjectAccessLevel,
+				ProjectLink:        project.ProjectLink,
 				PackageId:          p.ID,
-				PackageName:        p.Name,
+				PackageName:        p.Name + ": " + p.Version,
+				PackageLink:        p.Links.WebPath,
 				TotalPackageFiles:  resp.TotalItems,
 			})
 		}
 	}
 
+	log.Printf("resultList: %v", resultList)
 	return resultList, nil
 }
 
-func DeletePackageFiles(token string, baseUrl string, projectId string, packageId string) string {
-	var result string
+// func DeletePackageFiles(token string, baseUrl string, projectId string, packageId string) string {
+// 	var result string
 
-	if client == nil {
-		client, err = gitlab.NewClient(token, gitlab.WithBaseURL(baseUrl))
-	}
+// 	if client == nil {
+// 		client, err = gitlab.NewClient(token, gitlab.WithBaseURL(baseUrl))
+// 	}
 
-	pkg, _ := strconv.Atoi(packageId)
-	_, resp, _ := client.Packages.ListPackageFiles(projectId, pkg, &gitlab.ListPackageFilesOptions{
-		PerPage: 1,
-	})
+// 	pkg, _ := strconv.Atoi(packageId)
+// 	_, resp, _ := client.Packages.ListPackageFiles(projectId, pkg, &gitlab.ListPackageFilesOptions{
+// 		PerPage: 1,
+// 	})
 
-	totalItemCount := resp.TotalItems
-	var filesToDelete []*gitlab.PackageFile
+// 	totalItemCount := resp.TotalItems
+// 	var filesToDelete []*gitlab.PackageFile
 
-	if totalItemCount < 20 {
-		result = "삭제 대상 없음"
-	} else {
-		for i := 1; i <= (totalItemCount/100)+1; i++ {
-			listPackageFiles, _, _ := client.Packages.ListPackageFiles(projectId, pkg, &gitlab.ListPackageFilesOptions{
-				PerPage: 100,
-				Page:    i,
-			})
+// 	if totalItemCount < 20 {
+// 		result = "삭제 대상 없음"
+// 	} else {
+// 		for i := 1; i <= (totalItemCount/100)+1; i++ {
+// 			listPackageFiles, _, _ := client.Packages.ListPackageFiles(projectId, pkg, &gitlab.ListPackageFilesOptions{
+// 				PerPage: 100,
+// 				Page:    i,
+// 			})
 
-			filesToDelete = append(filesToDelete, listPackageFiles...)
-		}
+// 			filesToDelete = append(filesToDelete, listPackageFiles...)
+// 		}
 
-		sort.Slice(filesToDelete, func(i, j int) bool {
-			return filesToDelete[i].CreatedAt.After(*filesToDelete[j].CreatedAt)
-		})
+// 		sort.Slice(filesToDelete, func(i, j int) bool {
+// 			return filesToDelete[i].CreatedAt.After(*filesToDelete[j].CreatedAt)
+// 		})
 
-		log.Printf("삭제 대상 수: %v", len(filesToDelete)-20)
-		inC := make(chan int, len(filesToDelete))
+// 		log.Printf("삭제 대상 수: %v", len(filesToDelete)-20)
+// 		inC := make(chan int, len(filesToDelete))
 
-		for _, packageFile := range filesToDelete[20:] {
+// 		for _, packageFile := range filesToDelete[20:] {
 
-			inC <- packageFile.ID
+// 			inC <- packageFile.ID
 
-		}
-		close(inC)
+// 		}
+// 		close(inC)
 
-		workerCount := 20
-		var wg sync.WaitGroup
+// 		workerCount := 20
+// 		var wg sync.WaitGroup
 
-		log.Println("병렬 동작 시작")
-		for i := 0; i < workerCount; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for v := range inC {
-					log.Printf("Project: %v, Package: %v", projectId, pkg)
-					_, err := client.Packages.DeletePackageFile(projectId, pkg, v)
-					if err != nil {
-						log.Fatalf("Error deleteing file %d: %v", v, err)
-					}
-				}
-			}()
-		}
-		wg.Wait()
-		result = "성공"
-	}
+// 		log.Println("병렬 동작 시작")
+// 		for i := 0; i < workerCount; i++ {
+// 			wg.Add(1)
+// 			go func() {
+// 				defer wg.Done()
+// 				for v := range inC {
+// 					log.Printf("Project: %v, Package: %v", projectId, pkg)
+// 					_, err := client.Packages.DeletePackageFile(projectId, pkg, v)
+// 					if err != nil {
+// 						log.Fatalf("Error deleteing file %d: %v", v, err)
+// 					}
+// 				}
+// 			}()
+// 		}
+// 		wg.Wait()
+// 		result = "성공"
+// 	}
 
-	return result
+// 	return result
 
-}
+// }

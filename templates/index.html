@@ -2,86 +2,69 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <title>GitLab 프로젝트 조회</title>
-    <!-- Bootstrap CSS (CDN 또는 /static/css/bootstrap.min.css) -->
-    <link
-      rel="stylesheet"
-      href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
-    />
-    <link href="//cdn.jsdelivr.net/gh/wan2land/d2coding/d2coding-full.css" rel="stylesheet" />
-    <style>
-        * {
-            font-family: D2Coding !important;
-        }
-    </style>
-    <script
-      src="https://code.jquery.com/jquery-3.7.1.js"
-      integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4="
-      crossorigin="anonymous"
-    ></script>
-    <script
-        src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"
-        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" 
-        crossorigin="anonymous"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+    <title>GitLab Package File Manage</title>
+    {{ block "partial-script" . }}{{ end }}
     <script>
-      $(document).ready(function () {
-        $("#delete-package").click(function () {
-          // 체크된 행 선택
-          var selectedRows = $("input[name='selectRow']:checked").map(function() {
-            var row = $(this).closest('tr');
-            return {
-              projectId: row.find('.projectId').val(),
-              packageId: row.find('.packageId').val(),
-            };
-          }).get();
+      $(function () {
+        $("#projectTable").bootstrapTable({
+          url: "/search",
+          method: "GET",
+          contentType: "application/json",
+          dataType: "json",
+          responseHandler: (res) => {
+            return res.data
+          },
+          columns: [
+            {
+              field: "checked",
+              checkbox: true,
+            },
+            {
+              title: "Project ID",
+              field: "ProjectId",
+              visible: false,
+            },
+            {
+              title: "Package ID",
+              field: "PackageId",
+              visible: false,
+            },
+            {
+              title: "Project Name",
+              field: "ProjectName",
+              formatter: function(value, row, index, field) {
+                return '<a href="'+ row.ProjectLink + '" >'  + value +'</a>'
+              }
+            },
+            {
+              title: "Packge Name",
+              field: "PackageName",
+            },
+            {
+              title: "Package File Count",
+              field: "TotalPackageFiles",
+              sortable: true,
+            },
+          ],
+          showRefresh: false,
+          sortOrder: "desc",
+        });
 
-          console.log("선택된 항목:", selectedRows);
-
-          if (selectedRows.length === 0) {
-            alert("삭제할 항목을 선택해주세요.");
-            return;
-          }
-
-          // AJAX로 삭제 요청
-          // $.ajax({
-          //   url: "/delete_package",
-          //   type: "POST",
-          //   contentType: "application/json",
-          //   data: JSON.stringify({ packages: selectedRows }),
-          //   success: function(response) {
-          //     if (response.Message) {
-          //       alert(response.Message);
-          //       location.reload();
-          //     } else {
-          //       alert("삭제 실패");
-          //     }
-          //   },
-          //   error: function(xhr, status, error) {
-          //     alert("오류가 발생했습니다: " + error);
-          //   }
-          // });
+        $("#search").on("click", function (e) {
+          $("#projectTable").bootstrapTable("refresh", { url: "/search" });
         });
       });
-      $(document).ready(function() {
-        $("#selectAll").click(function() {
-        $("input[name='selectRow']").prop("checked", this.checked);
-        });
-    });
     </script>
-    
-    
   </head>
   <body>
     <!-- 검색 영역 -->
     <div class="container">
-        
-        <form action="/search" method="post" class="mb-4">
-            <div class="pb-2 mt-4 mb-2 border-bottom">
-                <h1>GitLab 프로젝트 조회</h1>
-            </div >
+      <form action="/search" method="post" class="mb-4">
+        <div class="pb-2 mt-4 mb-2 border-bottom">
+          <h2>GitLab Package File Manager</h2>
+        </div>
 
-            <div class="row">
+        <!-- <div class="row">
                 <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-2">
                     <label for="token" class="form-label fw-bold">Token 입력</label>
                     <input id="token" name="token" type="password" class="form-control">
@@ -91,49 +74,24 @@
                     <input id="baseUrl" name="baseUrl" type="text" class="form-control">
                 </div>
 
-            </div>
-        
-            <button type="submit" id="search" class="btn btn-primary">조회</button>
-            <button type="button" id="delete-package" class="btn btn-danger">삭제</button>
-          </form>
+            </div> -->
+      </form>
     </div>
 
     <!-- 테이블 영역 -->
-    <div class="container mb-4">
-
-        <!-- <div class="table" > -->
-            <table class="table table-bordered table-hover">
-                <thead class="thead-light">
-                    <tr>
-                      <th scope="col"><input type="checkbox" id="selectAll"></th>
-                      <!-- <th scope="col">Index</th> -->
-                      <th scope="col">프로젝트 명</th>
-                      <th scope="col">패키지 명</th>
-                      <th scope="col">패키지 파일 총 개수</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {{ if .Data }}
-                    {{ range $i, $project := .Data }}
-                        {{ if gt $project.TotalPackageFiles 20 }}
-                        <tr class="text-danger">
-                        {{ else }}
-                        <tr class="text-dark">
-                        {{ end }}
-                            <td>
-                              <input type="checkbox" name="selectRow">
-                              <input type="hidden" class="projectId" value="{{ $project.ProjectId }}">
-                              <input type="hidden" class="packageId" value="{{ $project.PackageId }}">
-                            </td>
-                            <td class="projectName">{{ $project.ProjectName }}</td>
-                            <td class="packageName">{{ $project.PackageName }}</td>
-                            <td class="totalPackageFiles">{{ $project.TotalPackageFiles }}</td>
-                        </tr>  
-                    {{ end }}
-                    {{ end }}
-                  </tbody>
-            </table>
-        <!-- </div> -->
+    <div class="container-fluid">
+      <div id="toolbar" class="w-100">
+        <button id="search" type="button" class="btn btn-success">
+          Search
+        </button>
+        <button id="remove-selected" type="button" class="btn btn-secondary">
+          Remove Selected
+        </button>
+        <button id="remove-all" type="button" class="btn btn-secondary">
+          Remove All
+        </button>
+      </div>
+      <table id="projectTable" style="table-layout: fixed"></table>
     </div>
   </body>
 </html>
