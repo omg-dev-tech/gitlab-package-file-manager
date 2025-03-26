@@ -31,6 +31,10 @@ type Response struct {
 	Message string
 }
 
+type Request[T any] struct {
+	Data T `json:"data"`
+}
+
 // Global Map for Session info (Session ID -> *gitlab.Client)
 var clientStore = struct {
 	sync.RWMutex
@@ -76,29 +80,29 @@ func main() {
 
 	// POST: Submit Login Form (token, url)
 	e.POST("/login", func(c echo.Context) error {
-		data := Response{}
+		response := Response{}
 		token := c.FormValue("token")
 		baseUrl := c.FormValue("baseUrl")
 
 		log.Printf("baseUrl: %v, token: %v", baseUrl, token)
 
 		if baseUrl == "" || token == "" {
-			data.Message = "Gitlab API URL and Private Token should exist"
-			return c.Render(http.StatusOK, "login.html", data)
+			response.Message = "Gitlab API URL and Private Token should exist"
+			return c.Render(http.StatusOK, "login.html", response)
 		}
 
 		client, err := gitlab.NewClient(token, gitlab.WithBaseURL(baseUrl))
 
 		if err != nil {
-			data.Message = "클라이언트 생성 오류: " + err.Error()
-			return c.Render(http.StatusInternalServerError, "login.html", data)
+			response.Message = "클라이언트 생성 오류: " + err.Error()
+			return c.Render(http.StatusInternalServerError, "login.html", response)
 		}
 
 		// 세션 가져오기
 		sess, err := session.Get("session", c)
 		if err != nil {
-			data.Message = "세션 오류: " + err.Error()
-			return c.Render(http.StatusInternalServerError, "login.html", data)
+			response.Message = "세션 오류: " + err.Error()
+			return c.Render(http.StatusInternalServerError, "login.html", response)
 		}
 
 		sessionID, ok := sess.Values["session_id"].(string)
@@ -122,7 +126,10 @@ func main() {
 		_client := getSession(c)
 
 		if _client != nil {
-			projects := Search(_client)
+
+			projectName := c.FormValue("projectName")
+			packageName := c.FormValue("packageName")
+			projects := Search(_client, projectName, packageName)
 			return c.JSON(http.StatusOK, map[string]interface{}{
 				"data":    projects,
 				"message": "Search Success",
@@ -132,21 +139,30 @@ func main() {
 		return c.Redirect(http.StatusTemporaryRedirect, "/login")
 	})
 
-	// e.POST("/delete_package", func(c echo.Context) error {
+	e.POST("/clean", func(c echo.Context) error {
+		var request Request[[]PackageFile]
+		_client := getSession(c)
 
-	// 	projectId := c.FormValue("project_id")
-	// 	packageId := c.FormValue("package_id")
+		if err := c.Bind(&request); err != nil {
+			log.Printf("error: %v", err)
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
+				"data":    err,
+				"message": "Clean Fail",
+			})
+		}
 
-	// 	log.Printf("delete package 호출 - projectId: %v, packageId: %v", projectId, packageId)
+		log.Printf("Input Data: %v", request)
+		if _client != nil {
+			results := Clean(_client, request.Data)
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"data":    results,
+				"message": "Clean Success",
+			})
+		}
 
-	// 	response := PageData{
-	// 		Data:    "",
-	// 		Message: DeletePackageFiles(token, baseUrl, projectId, packageId),
-	// 	}
+		return c.Redirect(http.StatusTemporaryRedirect, "/login")
 
-	// 	return c.Render(http.StatusOK, "index.html", response)
-
-	// })
+	})
 
 	e.Logger.Fatal(e.Start(":8080"))
 }

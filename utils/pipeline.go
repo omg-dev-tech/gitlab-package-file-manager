@@ -7,9 +7,9 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-type Executor func(interface{}, *gitlab.Client) (interface{}, error)
+type Executor func(interface{}, *gitlab.Client, ...any) (interface{}, error)
 type Pipeline interface {
-	Pipe(executor Executor) Pipeline
+	Pipe(executor Executor, searchOption ...any) Pipeline
 	Merge() <-chan interface{}
 }
 
@@ -18,9 +18,10 @@ type pipeline struct {
 	dataC     chan interface{}
 	errC      chan error
 	executors []Executor
+	options   [][]any
 }
 
-func New(f func(chan interface{}), client *gitlab.Client) Pipeline {
+func New(f func(chan interface{}), client *gitlab.Client, searchOption ...any) Pipeline {
 	inC := make(chan interface{})
 	go f(inC)
 	return &pipeline{
@@ -28,16 +29,18 @@ func New(f func(chan interface{}), client *gitlab.Client) Pipeline {
 		dataC:     inC,
 		errC:      make(chan error),
 		executors: []Executor{},
+		options:   [][]any{},
 	}
 }
 
-func (p *pipeline) Pipe(executor Executor) Pipeline {
+func (p *pipeline) Pipe(executor Executor, searchOption ...any) Pipeline {
 	p.executors = append(p.executors, executor)
+	p.options = append(p.options, searchOption)
 	return p
 }
 func (p *pipeline) Merge() <-chan interface{} {
 	for i := 0; i < len(p.executors); i++ {
-		p.dataC, p.errC = run(p.dataC, p.executors[i], p.client)
+		p.dataC, p.errC = run(p.dataC, p.executors[i], p.client, p.options[i]...)
 	}
 	return p.dataC
 }
@@ -45,11 +48,12 @@ func run(
 	inC <-chan interface{},
 	f Executor,
 	client *gitlab.Client,
+	searchOption ...any,
 ) (chan interface{}, chan error) {
 	outC := make(chan interface{})
 	errC := make(chan error)
 
-	workerCount := 10
+	workerCount := 100
 	var wg sync.WaitGroup
 
 	go func() {
@@ -58,10 +62,11 @@ func run(
 
 		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
-			go func() {
+			go func(workerId int) {
+				// log.Printf("[worker-%v] start", workerId)
 				defer wg.Done()
 				for v := range inC {
-					res, err := f(v, client)
+					res, err := f(v, client, searchOption...)
 					if err != nil {
 						errC <- err
 						continue
@@ -76,7 +81,8 @@ func run(
 						outC <- res
 					}
 				}
-			}()
+				// log.Printf("[worker-%v] done", workerId)
+			}(i)
 		}
 
 		wg.Wait()

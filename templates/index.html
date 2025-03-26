@@ -12,7 +12,13 @@
           contentType: "application/json",
           dataType: "json",
           responseHandler: (res) => {
-            return res.data
+            return res.data;
+          },
+          queryParams: function(params){
+            $.each($("#searchOption :input[name]"), (index, value) => {
+              params[$(value).attr('name')] = $(value).val();
+            })
+            return params;
           },
           columns: [
             {
@@ -32,13 +38,20 @@
             {
               title: "Project Name",
               field: "ProjectName",
-              formatter: function(value, row, index, field) {
-                return '<a href="'+ row.ProjectLink + '" >'  + value +'</a>'
-              }
+              formatter: function (value, row, index, field) {
+                return '<a href="' + row.ProjectLink + '" >' + value + "</a>";
+              },
             },
             {
               title: "Packge Name",
               field: "PackageName",
+              formatter: function (value, row, index, field) {
+                return '<a href="' + row.PackageLink + '" >' + value + "</a>";
+              },
+            },
+            {
+              title: "Package Version",
+              field: "PackageVersion"
             },
             {
               title: "Package File Count",
@@ -53,28 +66,65 @@
         $("#search").on("click", function (e) {
           $("#projectTable").bootstrapTable("refresh", { url: "/search" });
         });
+
+        $("#clean-selected").on("click", function (e) {
+          var selected = $("#projectTable").bootstrapTable("getSelections");
+          if (selected.length > 0) {
+            selected = selected.map(function (element) {
+              return {
+                ProjectId: element.ProjectId,
+                PackageId: element.PackageId,
+              };
+            });
+
+            console.log(selected);
+            $.ajax({
+              url: "/clean",
+              method: "POST",
+              data: JSON.stringify({ data: selected }),
+              contentType: "application/json; charset=utf-8",
+              dataType: "json",
+            }).done(function (data, textStatus, jqXHR) {
+              console.log(data);
+              console.log(textStatus);
+              console.log(jqXHR);
+              alert("완료!");
+              $("#projectTable").bootstrapTable("refresh");
+            });
+          }
+        });
       });
     </script>
   </head>
   <body>
     <!-- 검색 영역 -->
     <div class="container">
-      <form action="/search" method="post" class="mb-4">
+      <form id="searchOption" action="/search" method="get" class="mb-4">
         <div class="pb-2 mt-4 mb-2 border-bottom">
           <h2>GitLab Package File Manager</h2>
         </div>
 
-        <!-- <div class="row">
-                <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-2">
-                    <label for="token" class="form-label fw-bold">Token 입력</label>
-                    <input id="token" name="token" type="password" class="form-control">
-                </div>
-                <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-2">
-                    <label for="baseUrl" class="form-label fw-bold">Base URL 입력</label>
-                    <input id="baseUrl" name="baseUrl" type="text" class="form-control">
-                </div>
-
-            </div> -->
+        <div class="row">
+          <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
+            <label for="projectName" class="form-label fw-bold">Project Name</label>
+            <input
+              id="projectName"
+              name="projectName"
+              type="text"
+              class="form-control"
+            />
+          </div>
+          <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
+            <label for="packageName" class="form-label fw-bold">Package Name</label
+            >
+            <input
+              id="packageName"
+              name="packageName"
+              type="text"
+              class="form-control"
+            />
+          </div>
+        </div>
       </form>
     </div>
 
@@ -84,11 +134,11 @@
         <button id="search" type="button" class="btn btn-success">
           Search
         </button>
-        <button id="remove-selected" type="button" class="btn btn-secondary">
-          Remove Selected
+        <button id="clean-selected" type="button" class="btn btn-secondary">
+          Clean Selected
         </button>
-        <button id="remove-all" type="button" class="btn btn-secondary">
-          Remove All
+        <button id="clean-all" type="button" class="btn btn-secondary">
+          Clean All
         </button>
       </div>
       <table id="projectTable" style="table-layout: fixed"></table>
