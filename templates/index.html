@@ -2,7 +2,7 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <title>GitLab Package File Manage</title>
+    <title>GitLab Package File Manager</title>
     {{ block "partial-script" . }}{{ end }}
     <script>
       $(function () {
@@ -14,10 +14,10 @@
           responseHandler: (res) => {
             return res.data;
           },
-          queryParams: function(params){
+          queryParams: function (params) {
             $.each($("#searchOption :input[name]"), (index, value) => {
-              params[$(value).attr('name')] = $(value).val();
-            })
+              params[$(value).attr("name")] = $(value).val();
+            });
             return params;
           },
           columns: [
@@ -51,7 +51,7 @@
             },
             {
               title: "Package Version",
-              field: "PackageVersion"
+              field: "PackageVersion",
             },
             {
               title: "Package File Count",
@@ -61,6 +61,8 @@
           ],
           showRefresh: false,
           sortOrder: "desc",
+          pagination: true,
+          paginationLoadMore: true,
         });
 
         $("#search").on("click", function (e) {
@@ -84,13 +86,25 @@
               data: JSON.stringify({ data: selected }),
               contentType: "application/json; charset=utf-8",
               dataType: "json",
-            }).done(function (data, textStatus, jqXHR) {
-              console.log(data);
-              console.log(textStatus);
-              console.log(jqXHR);
-              alert("완료!");
-              $("#projectTable").bootstrapTable("refresh");
-            });
+            })
+              .done(function (data, textStatus, jqXHR) {
+                console.log(data);
+                console.log(textStatus);
+                console.log(jqXHR);
+                Swal.fire({
+                  text: "삭제가 성공했습니다.",
+                  icon: "success",
+                });
+                $("#projectTable").bootstrapTable("refresh");
+              })
+              .fail(function (jqXHR, textStatus, errorThrown) {
+                Swal.fire({
+                  text: "오류가 발생했습니다.",
+                  text: errorThrown,
+                  icon: "error",
+                  confirmButtonText: "확인",
+                });
+              });
           }
         });
       });
@@ -106,7 +120,9 @@
 
         <div class="row">
           <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
-            <label for="projectName" class="form-label fw-bold">Project Name</label>
+            <label for="projectName" class="form-label fw-bold"
+              >Project Name</label
+            >
             <input
               id="projectName"
               name="projectName"
@@ -115,7 +131,8 @@
             />
           </div>
           <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
-            <label for="packageName" class="form-label fw-bold">Package Name</label
+            <label for="packageName" class="form-label fw-bold"
+              >Package Name</label
             >
             <input
               id="packageName"

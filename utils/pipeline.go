@@ -7,7 +7,7 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
-type Executor func(interface{}, *gitlab.Client, ...any) (interface{}, error)
+type Executor func(interface{}, *gitlab.Client, int, ...any) (interface{}, error)
 type Pipeline interface {
 	Pipe(executor Executor, searchOption ...any) Pipeline
 	Merge() <-chan interface{}
@@ -53,7 +53,7 @@ func run(
 	outC := make(chan interface{})
 	errC := make(chan error)
 
-	workerCount := 100
+	workerCount := 200
 	var wg sync.WaitGroup
 
 	go func() {
@@ -63,10 +63,9 @@ func run(
 		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
 			go func(workerId int) {
-				// log.Printf("[worker-%v] start", workerId)
 				defer wg.Done()
 				for v := range inC {
-					res, err := f(v, client, searchOption...)
+					res, err := f(v, client, i, searchOption...)
 					if err != nil {
 						errC <- err
 						continue
@@ -74,14 +73,13 @@ func run(
 
 					resValue := reflect.ValueOf(res)
 					if resValue.Kind() == reflect.Slice || resValue.Kind() == reflect.Array {
-						for i := 0; i < resValue.Len(); i++ {
-							outC <- resValue.Index(i).Interface()
+						for j := 0; j < resValue.Len(); j++ {
+							outC <- resValue.Index(j).Interface()
 						}
 					} else {
 						outC <- res
 					}
 				}
-				// log.Printf("[worker-%v] done", workerId)
 			}(i)
 		}
 
