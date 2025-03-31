@@ -39,8 +39,8 @@ func Search(client *gitlab.Client, projectName string, packageName string) []Pro
 	resultC := utils.New(func(inC chan interface{}) {
 		inC <- nil
 		close(inC)
-	}, client).Pipe(func(input interface{}, client *gitlab.Client, options ...any) (interface{}, error) {
-
+	}, client).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
+		log.Printf("[worker-%v] first start", workerId)
 		projectName := options[0].(string)
 		log.Printf("검색 옵션: %v", projectName)
 		var results []Project
@@ -93,13 +93,13 @@ func Search(client *gitlab.Client, projectName string, packageName string) []Pro
 				})
 			}
 		}
-
+		log.Printf("[worker-%v] first done | %v", workerId, results)
 		return results, nil
-	}, projectName).Pipe(func(input interface{}, client *gitlab.Client, options ...any) (interface{}, error) {
+	}, projectName).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
 		project := input.(Project)
 		packageName := options[0].(string)
 		var resultList []Project
-
+		log.Printf("[worker-%v] second start", workerId)
 		_, resp, _ := client.Packages.ListProjectPackages(project.ProjectId, &gitlab.ListProjectPackagesOptions{
 			PackageName: &packageName,
 			ListOptions: gitlab.ListOptions{
@@ -135,14 +135,14 @@ func Search(client *gitlab.Client, projectName string, packageName string) []Pro
 				})
 			}
 		}
-
+		log.Printf("[worker-%v] second done | %v", workerId, resultList)
 		return resultList, nil
 	}, packageName).Merge()
 
 	var resultList []Project
 	for result := range resultC {
 		if project, ok := result.(Project); ok {
-			log.Printf("result <- %v", result)
+			// log.Printf("result <- %v", result)
 			resultList = append(resultList, project)
 		}
 	}
@@ -162,7 +162,8 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 			inC <- packageFile
 		}
 		close(inC)
-	}, client).Pipe(func(input interface{}, client *gitlab.Client, options ...any) (interface{}, error) {
+	}, client).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
+		log.Printf("[worker-%v] start", workerId)
 		var filesToDelete []PackageFile
 		packageFile := input.(PackageFile)
 		_, resp, _ := client.Packages.ListPackageFiles(packageFile.ProjectId, packageFile.PackageId, &gitlab.ListPackageFilesOptions{
@@ -191,12 +192,15 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 				return filesToDelete[i].CreatedAt.After(*filesToDelete[j].CreatedAt)
 			})
 			log.Printf("filesToDelete: %v", filesToDelete)
+			log.Printf("[worker-%v] done", workerId)
 			return filesToDelete[20:], nil
 		}
-	}).Pipe(func(input interface{}, client *gitlab.Client, a ...any) (interface{}, error) {
+	}).Pipe(func(input interface{}, client *gitlab.Client, workerId int, a ...any) (interface{}, error) {
+		log.Printf("[worker-%v] start", workerId)
 		packageFile := input.(PackageFile)
 
 		response, err := client.Packages.DeletePackageFile(packageFile.ProjectId, packageFile.PackageId, packageFile.PackageFileId)
+		log.Printf("[worker-%v] done", workerId)
 		if err != nil {
 			return fmt.Sprint("%d, %d, %d Error: %v", packageFile.ProjectId, packageFile.PackageId, packageFile.PackageFileId, err), err
 		} else {
@@ -213,5 +217,6 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 	}
 
 	log.Printf("정리 서비스 완료")
+
 	return resultList
 }
