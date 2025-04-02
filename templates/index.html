@@ -2,6 +2,10 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
     <title>GitLab Package File Manager</title>
     {{ block "partial-script" . }}{{ end }}
     <script>
@@ -41,6 +45,7 @@
               formatter: function (value, row, index, field) {
                 return '<a href="' + row.ProjectLink + '" >' + value + "</a>";
               },
+              sortable: true,
             },
             {
               title: "Packge Name",
@@ -48,10 +53,12 @@
               formatter: function (value, row, index, field) {
                 return '<a href="' + row.PackageLink + '" >' + value + "</a>";
               },
+              sortable: true,
             },
             {
               title: "Package Version",
               field: "PackageVersion",
+              sortable: true,
             },
             {
               title: "Package File Count",
@@ -63,6 +70,7 @@
           sortOrder: "desc",
           pagination: true,
           paginationLoadMore: true,
+          toolbar: "#toolbar"
         });
 
         $("#search").on("click", function (e) {
@@ -84,6 +92,9 @@
               url: "/clean",
               method: "POST",
               data: JSON.stringify({ data: selected }),
+              headers: {
+                'X-XSRF-TOKEN': '{{ .CsrfToken }}',
+              },
               contentType: "application/json; charset=utf-8",
               dataType: "json",
             })
@@ -112,53 +123,76 @@
   </head>
   <body>
     <!-- 검색 영역 -->
-    <div class="container">
-      <form id="searchOption" action="/search" method="get" class="mb-4">
-        <div class="pb-2 mt-4 mb-2 border-bottom">
-          <h2>GitLab Package File Manager</h2>
-        </div>
+    <main>
+      <div class="container">
+        <form id="searchOption" action="/search" method="get" class="mb-4">
+          <div class="pb-2 mt-4 mb-2 border-bottom">
+            <h2>GitLab Package File Manager</h2>
+          </div>
 
-        <div class="row">
-          <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
-            <label for="projectName" class="form-label fw-bold"
-              >Project Name</label
-            >
-            <input
-              id="projectName"
-              name="projectName"
+          <div class="row">
+            <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
+              <label for="projectName" class="form-label fw-bold"
+                >Project Name</label
+              >
+              <input
+                id="projectName"
+                name="projectName"
+                type="text"
+                class="form-control"
+              />
+            </div>
+            <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
+              <label for="packageName" class="form-label fw-bold"
+                >Package Name</label
+              >
+              <input
+                id="packageName"
+                name="packageName"
+                type="text"
+                class="form-control"
+              />
+            </div>
+            <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
+              <label for="packageName" class="form-label fw-bold"
+                >File Count Range</label
+              >
+              <div class="input-group">
+
+                <input
+                id="fromFileCount"
+                name="fromFileCount"
+                type="text"
+                class="form-control"
+                placeholder="from"
+              />
+              <input
+              id="toFileCount"
+              name="toFileCount"
               type="text"
               class="form-control"
-            />
+              placeholder="to"
+              />
+            </div>
+            </div>
           </div>
-          <div class="mb-3 col-6 col-sm-6 col-md-4 col-lg-3 col-xl-3">
-            <label for="packageName" class="form-label fw-bold"
-              >Package Name</label
-            >
-            <input
-              id="packageName"
-              name="packageName"
-              type="text"
-              class="form-control"
-            />
-          </div>
-        </div>
-      </form>
-    </div>
-
-    <!-- 테이블 영역 -->
-    <div class="container-fluid">
-      <div id="toolbar" class="w-100">
-        <button id="search" type="button" class="btn btn-success">
-          Search
-        </button>
-        <button id="clean-selected" type="button" class="btn btn-secondary">
-          Clean Selected
-        </button>
-        <button id="clean-all" type="button" class="btn btn-secondary">
-          Clean All
-        </button>
+        </form>
       </div>
-      <table id="projectTable" style="table-layout: fixed"></table>
-    </div>
+
+      <!-- 테이블 영역 -->
+      <div class="container-fluid">
+        <div id="toolbar" class="w-100">
+          <button id="search" type="button" class="btn btn-success">
+            Search
+          </button>
+          <button id="clean-selected" type="button" class="btn btn-danger">
+            Clean Selected
+          </button>
+        </div>
+        <table id="projectTable" style="table-layout: fixed">
+
+        </table>
+      </div>
+    </main>
   </body>
 </html>

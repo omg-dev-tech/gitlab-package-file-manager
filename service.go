@@ -4,6 +4,7 @@ import (
 	"gitlab-asset-cleaner/utils"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +33,7 @@ type PackageFile struct {
 	CreatedAt     *time.Time
 }
 
-func Search(client *gitlab.Client, projectName string, packageName string) []Project {
+func Search(client *gitlab.Client, projectName string, packageName string, fromFileCount string, toFileCount string) []Project {
 	log.Printf("조회 서비스 시작")
 
 	// 첫번째 파이프라인 정의 packages 조회 후 다음 파이프라인 채널로..
@@ -98,6 +99,7 @@ func Search(client *gitlab.Client, projectName string, packageName string) []Pro
 	}, projectName).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
 		project := input.(Project)
 		packageName := options[0].(string)
+
 		var resultList []Project
 		log.Printf("[worker-%v] second start", workerId)
 		_, resp, _ := client.Packages.ListProjectPackages(project.ProjectId, &gitlab.ListProjectPackagesOptions{
@@ -107,6 +109,12 @@ func Search(client *gitlab.Client, projectName string, packageName string) []Pro
 			},
 		})
 		totalPackageCount := resp.TotalItems
+
+		from, _ := strconv.Atoi(fromFileCount)
+		to, err := strconv.Atoi(toFileCount)
+		if err != nil || to == 0 {
+			to = 9999
+		}
 
 		for i := range (totalPackageCount / 100) + 1 {
 			packages, _, _ := client.Packages.ListProjectPackages(project.ProjectId, &gitlab.ListProjectPackagesOptions{
@@ -121,6 +129,9 @@ func Search(client *gitlab.Client, projectName string, packageName string) []Pro
 				_, resp, _ := client.Packages.ListPackageFiles(project.ProjectId, p.ID, &gitlab.ListPackageFilesOptions{
 					PerPage: 1,
 				})
+				if resp.TotalItems < from || resp.TotalItems > to {
+					continue
+				}
 
 				resultList = append(resultList, Project{
 					ProjectId:          project.ProjectId,

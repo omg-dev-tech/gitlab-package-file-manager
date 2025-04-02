@@ -2,11 +2,15 @@ package main
 
 import (
 	"crypto/rand"
+	"embed"
 	"encoding/hex"
+	"flag"
 	"html/template"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/gorilla/sessions"
@@ -16,6 +20,12 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
+
+//go:embed templates/*.html
+var templatesFS embed.FS
+
+//go:embed static/*
+var staticFS embed.FS
 
 type TemplateRenderer struct {
 	templates *template.Template
@@ -27,8 +37,9 @@ func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c 
 
 // Response Wrapper
 type Response struct {
-	Data    interface{}
-	Message string
+	Data      interface{}
+	Message   string
+	CsrfToken string
 }
 
 type Request[T any] struct {
@@ -44,24 +55,40 @@ var clientStore = struct {
 }
 
 func main() {
+	// TODO DB Enable flag 처리
+
+	// dsn := "host=localhost user=postgres dbname=postgres port=5432 sslmode=disable TimeZone=Asia/Seoul"
+	// db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+	port := flag.Int("port", 8080, "Web Port")
+	flag.Parse()
+
 	e := echo.New()
 
 	// Set middleware for Logger & Recover
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	// Set middleware for static resources
-	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-		Root: "static",
-	}))
 	// Set middleware for session
-	e.Use(session.Middleware(sessions.NewCookieStore([]byte("super-secret-key"))))
+	store := sessions.NewCookieStore([]byte("super-secret-key"))
+	store.Options = &sessions.Options{
+		Secure:   false,
+		HttpOnly: true,
+	}
+	e.Use(session.Middleware(store))
 
 	// CSRF 미들웨어 제거 또는 비활성화
-	// e.Use(middleware.CSRF()) <- 이런 코드가 있다면 제거
+	e.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
+		TokenLookup: "header:X-XSRF-TOKEN,form:X-XSRF-TOKEN",
+		CookieName:  "XSRF-TOKEN", // 쿠키에 저장되는 토큰 이름
+	}))
+
+	// fs.FS에서 http.FileSystem으로 변환 (서브 디렉토리 사용 가능)
+	staticFiles, _ := fs.Sub(staticFS, "static")
+	e.StaticFS("/static", staticFiles)
 
 	// Set Template Renderer
 	renderer := &TemplateRenderer{
-		templates: template.Must(template.ParseGlob("templates/*.html")),
+		templates: template.Must(template.ParseFS(templatesFS, "templates/*.html")),
 	}
 	e.Renderer = renderer
 
@@ -69,8 +96,10 @@ func main() {
 	e.GET("/", func(c echo.Context) error {
 		// check whether session exists
 		_client := getSession(c)
-		response := Response{}
-
+		csrfToken := c.Get("csrf").(string)
+		response := Response{
+			CsrfToken: csrfToken,
+		}
 		if _client != nil {
 			response.Message = "Login Success"
 			return c.Render(http.StatusOK, "index.html", response)
@@ -80,7 +109,10 @@ func main() {
 
 	// POST: Submit Login Form (token, url)
 	e.POST("/login", func(c echo.Context) error {
-		response := Response{}
+		csrfToken := c.FormValue("X-XSRF-TOKEN")
+		response := Response{
+			CsrfToken: csrfToken,
+		}
 		token := c.FormValue("token")
 		baseUrl := c.FormValue("baseUrl")
 
@@ -125,14 +157,19 @@ func main() {
 
 		_client := getSession(c)
 
+		csrfToken := c.Get("csrf").(string)
 		if _client != nil {
 
 			projectName := c.FormValue("projectName")
 			packageName := c.FormValue("packageName")
-			projects := Search(_client, projectName, packageName)
+			fromFileCount := c.FormValue("fromFileCount")
+			toFileCount := c.FormValue("toFileCount")
+
+			projects := Search(_client, projectName, packageName, fromFileCount, toFileCount)
 			return c.JSON(http.StatusOK, map[string]interface{}{
-				"data":    projects,
-				"message": "Search Success",
+				"data":      projects,
+				"message":   "Search Success",
+				"CsrfToken": csrfToken,
 			})
 		}
 
@@ -142,12 +179,13 @@ func main() {
 	e.POST("/clean", func(c echo.Context) error {
 		var request Request[[]PackageFile]
 		_client := getSession(c)
-
+		csrfToken := c.Get("csrf").(string)
 		if err := c.Bind(&request); err != nil {
 			log.Printf("error: %v", err)
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
-				"data":    err,
-				"message": "Clean Fail",
+				"data":      err,
+				"message":   "Clean Fail",
+				"CsrfToken": csrfToken,
 			})
 		}
 
@@ -155,8 +193,9 @@ func main() {
 		if _client != nil {
 			results := Clean(_client, request.Data)
 			return c.JSON(http.StatusOK, map[string]interface{}{
-				"data":    results,
-				"message": "Clean Success",
+				"data":      results,
+				"message":   "Clean Success",
+				"CsrfToken": csrfToken,
 			})
 		}
 
@@ -164,7 +203,7 @@ func main() {
 
 	})
 
-	e.Logger.Fatal(e.Start(":8080"))
+	e.Logger.Fatal(e.Start(":" + strconv.Itoa(*port)))
 }
 
 func getSession(c echo.Context) *gitlab.Client {
