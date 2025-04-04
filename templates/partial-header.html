@@ -1,0 +1,34 @@
+{{ define "partial-header" }}
+<header>
+  <nav
+    class="navbar navbar-expand-lg bg-dark shadow border-bottom"
+    data-bs-theme="dark"
+  >
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Gitlab File Manager</a>
+      <button
+        class="navbar-toggler"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#navbarToggler"
+        aria-controls="navbarToggler"
+        aria-expanded="false"
+        aria-label="Toggle navigation"
+      >
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarToggler">
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0"></ul>
+        <form action="/logout" method="POST" >
+          <input type="hidden" name="X-XSRF-TOKEN" value="{{ .CsrfToken }}" />
+          <span class="input-group">
+            <button class="btn btn-outline-light" type="submit">
+              logout <i class="fa-fw fa-solid fa-right-from-bracket"></i>
+            </button>
+          </span>
+        </form>
+      </div>
+    </div>
+  </nav>
+</header>
+{{ end }}

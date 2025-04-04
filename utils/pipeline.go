@@ -53,7 +53,7 @@ func run(
 	outC := make(chan interface{})
 	errC := make(chan error)
 
-	workerCount := 200
+	workerCount := 30
 	var wg sync.WaitGroup
 
 	go func() {

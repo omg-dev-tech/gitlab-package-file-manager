@@ -36,7 +36,6 @@ type PackageFile struct {
 func Search(client *gitlab.Client, projectName string, packageName string, fromFileCount string, toFileCount string) []Project {
 	log.Printf("조회 서비스 시작")
 
-	// 첫번째 파이프라인 정의 packages 조회 후 다음 파이프라인 채널로..
 	resultC := utils.New(func(inC chan interface{}) {
 		inC <- nil
 		close(inC)
@@ -230,4 +229,9 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 	log.Printf("정리 서비스 완료")
 
 	return resultList
+}
+
+func Statics(token *string, client *gitlab.Client) interface{} {
+
+	return nil
 }

@@ -50,8 +50,10 @@ type Request[T any] struct {
 var clientStore = struct {
 	sync.RWMutex
 	clients map[string]*gitlab.Client
+	tokens  map[string]string
 }{
 	clients: make(map[string]*gitlab.Client),
+	tokens:  make(map[string]string),
 }
 
 func main() {
@@ -95,7 +97,7 @@ func main() {
 	// GET: Login Page
 	e.GET("/", func(c echo.Context) error {
 		// check whether session exists
-		_client := getSession(c)
+		_client := getClient(c)
 		csrfToken := c.Get("csrf").(string)
 		response := Response{
 			CsrfToken: csrfToken,
@@ -119,6 +121,7 @@ func main() {
 		log.Printf("baseUrl: %v, token: %v", baseUrl, token)
 
 		if baseUrl == "" || token == "" {
+			log.Printf("입력 오류!!")
 			response.Message = "Gitlab API URL and Private Token should exist"
 			return c.Render(http.StatusOK, "login.html", response)
 		}
@@ -126,8 +129,14 @@ func main() {
 		client, err := gitlab.NewClient(token, gitlab.WithBaseURL(baseUrl))
 
 		if err != nil {
+			log.Printf("클라이언트 생성 오류: %v", err.Error())
 			response.Message = "클라이언트 생성 오류: " + err.Error()
 			return c.Render(http.StatusInternalServerError, "login.html", response)
+		}
+
+		if _, _, err := client.Users.CurrentUser(); err != nil {
+			response.Message = "올바르지 않은 토큰 값입니다."
+			return c.Render(http.StatusUnauthorized, "login.html", response)
 		}
 
 		// 세션 가져오기
@@ -146,16 +155,47 @@ func main() {
 
 		clientStore.Lock()
 		clientStore.clients[sessionID] = client
+		clientStore.tokens[sessionID] = token
 		clientStore.Unlock()
 
 		return c.Redirect(http.StatusFound, "/")
 
 	})
 
+	e.POST("/logout", func(c echo.Context) error {
+		// CSRF 토큰은 필요한 경우 로그 출력이나 추가 검증에 사용 가능
+		csrfToken := c.FormValue("X-XSRF-TOKEN")
+		log.Printf("Logout 요청 CSRF 토큰: %v", csrfToken)
+
+		// 세션 가져오기
+		sess, err := session.Get("session", c)
+		if err != nil {
+			// 세션이 이미 파기된 경우도 있으므로 에러 로깅 후 리다이렉트
+			log.Printf("세션 가져오기 오류: %v", err)
+			return c.Redirect(http.StatusFound, "/")
+		}
+
+		// 세션에 저장된 session_id를 통해 clientStore에서 삭제
+		sessionID, ok := sess.Values["session_id"].(string)
+		if ok && sessionID != "" {
+			clientStore.Lock()
+			delete(clientStore.clients, sessionID)
+			clientStore.Unlock()
+		}
+
+		// 세션을 삭제 (쿠키 삭제를 위해 MaxAge를 -1로 설정)
+		sess.Options.MaxAge = -1
+		if err := sess.Save(c.Request(), c.Response()); err != nil {
+			log.Printf("세션 삭제 오류: %v", err)
+		}
+
+		return c.Redirect(http.StatusFound, "/")
+	})
+
 	// POST: 토큰이 권한을 가지고 있는 모든 프로젝트
 	e.GET("/search", func(c echo.Context) error {
 
-		_client := getSession(c)
+		_client := getClient(c)
 
 		csrfToken := c.Get("csrf").(string)
 		if _client != nil {
@@ -178,7 +218,7 @@ func main() {
 
 	e.POST("/clean", func(c echo.Context) error {
 		var request Request[[]PackageFile]
-		_client := getSession(c)
+		_client := getClient(c)
 		csrfToken := c.Get("csrf").(string)
 		if err := c.Bind(&request); err != nil {
 			log.Printf("error: %v", err)
@@ -203,10 +243,21 @@ func main() {
 
 	})
 
+	e.GET("/statics", func(c echo.Context) error {
+		token := getToken(c)
+
+		if token == nil {
+			return c.Redirect(http.StatusUnauthorized, "/")
+
+		}
+
+		return c.Render(http.StatusOK, "/main.html", "")
+	})
+
 	e.Logger.Fatal(e.Start(":" + strconv.Itoa(*port)))
 }
 
-func getSession(c echo.Context) *gitlab.Client {
+func getClient(c echo.Context) *gitlab.Client {
 	sess, err := session.Get("session", c)
 	if err != nil {
 		return nil
@@ -226,6 +277,28 @@ func getSession(c echo.Context) *gitlab.Client {
 	}
 
 	return client
+}
+
+func getToken(c echo.Context) *string {
+	sess, err := session.Get("session", c)
+	if err != nil {
+		return nil
+	}
+
+	sessionID, ok := sess.Values["session_id"].(string)
+	if !ok || sessionID == "" {
+		return nil
+	}
+
+	clientStore.RLock()
+	token, exists := clientStore.tokens[sessionID]
+	clientStore.RUnlock()
+
+	if !exists {
+		return nil
+	}
+
+	return &token
 }
 
 func generateSessionID() string {

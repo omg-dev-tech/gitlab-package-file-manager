@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, shrink-to-fit=no"
     />
-  
+
     <title>GitLab Package File Manage</title>
     {{ block "partial-script" . }}{{ end }}
     <style>
@@ -93,13 +93,20 @@
   <body class="d-flex align-items-center py-4 bg-body-tertiary">
     <main class="form-signin w-100 m-auto">
       <form id="login" action="/login" method="POST" class="form-signin">
-        <input type="hidden" name="X-XSRF-TOKEN" value="{{ .CsrfToken }}">
+        <input type="hidden" name="X-XSRF-TOKEN" value="{{ .CsrfToken }}" />
         <div class="text-center">
           <img class="mb-4" src="/static/favicon.png" width="266" alt="" />
         </div>
+        {{  if .Message  }}
+        <div class="alert alert-danger" style="font-size: 75%">
+          <i class="fa-fw fa-solid fa-circle-exclamation"></i>
+          {{  .Message  }}
+        </div>
+        <hr />
+        {{  end  }}
         <h1 class="h3 mb-3 fw-normal">GitLab Package File Manager</h1>
         <div class="form-group">
-          <label for="sr-only">Gitlab API URL</label>
+          <label for="sr-only">Gi tlab API URL</label>
           <input
             id="baseUrl"
             name="baseUrl"
@@ -119,7 +126,9 @@
             placeholder="Private Token"
           />
         </div>
-        <button class="btn btn-primary w-100 py-2" type="submit">Connect Client</button>
+        <button class="btn btn-primary w-100 py-2" type="submit">
+          Connect Client
+        </button>
       </form>
     </main>
   </body>
