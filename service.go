@@ -39,63 +39,7 @@ func Search(client *gitlab.Client, projectName string, packageName string, fromF
 	resultC := utils.New(func(inC chan interface{}) {
 		inC <- nil
 		close(inC)
-	}, client).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
-		log.Printf("[worker-%v] first start", workerId)
-		projectName := options[0].(string)
-		log.Printf("검색 옵션: %v", projectName)
-		var results []Project
-
-		_, resp, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
-			Search: &projectName,
-			ListOptions: gitlab.ListOptions{
-				PerPage: 1,
-				Page:    1,
-			},
-			MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
-		})
-		projectCount := resp.TotalItems
-
-		for i := range (projectCount / 100) + 1 {
-			result, _, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
-				Search: &projectName,
-				ListOptions: gitlab.ListOptions{
-					PerPage: 100,
-					Page:    i,
-				},
-				// Membership:     gitlab.Ptr(true),
-				MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
-			})
-
-			for _, p := range result {
-				accessLevel := func(project gitlab.Project) int {
-					accessLevel := 0
-					if project.Permissions == nil {
-						return accessLevel
-					}
-
-					if project.Permissions.ProjectAccess != nil {
-						accessLevel = max(accessLevel, int(project.Permissions.ProjectAccess.AccessLevel))
-					}
-
-					if project.Permissions.GroupAccess != nil {
-						accessLevel = max(accessLevel, int(project.Permissions.GroupAccess.AccessLevel))
-					}
-
-					return accessLevel
-
-				}(*p)
-
-				results = append(results, Project{
-					ProjectId:          p.ID,
-					ProjectName:        p.Name,
-					ProjectAccessLevel: accessLevel,
-					ProjectLink:        p.WebURL,
-				})
-			}
-		}
-		log.Printf("[worker-%v] first done | %v", workerId, results)
-		return results, nil
-	}, projectName).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
+	}, client).Pipe(getProject, projectName).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
 		project := input.(Project)
 		packageName := options[0].(string)
 
@@ -231,7 +175,85 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 	return resultList
 }
 
-func Statics(token *string, client *gitlab.Client) interface{} {
+func Statistics(client *gitlab.Client) interface{} {
+	isStatistics := true
 
+	resultC := utils.New(func(inC chan interface{}) {
+		inC <- nil
+		close(inC)
+	}, client).Pipe(getProject, "").Pipe(func(project interface{}, client *gitlab.Client, workerId int, a ...any) (interface{}, error) {
+
+		projectId := project.(Project).ProjectId
+		projectInfo, _, _ := client.Projects.GetProject(projectId, &gitlab.GetProjectOptions{
+			Statistics: &isStatistics,
+		})
+		log.Printf("[worker-%v] %v: %v", workerId, projectInfo.Name, projectInfo.Statistics.PackagesSize)
+		return projectInfo.Statistics.PackagesSize, nil
+	}, "").Merge()
+
+	var resultList []string
+	for result := range resultC {
+		if response, ok := result.(string); ok {
+			resultList = append(resultList, response)
+		}
+	}
 	return nil
+}
+
+func getProject(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
+	log.Printf("[worker-%v] first start", workerId)
+	projectName := options[0].(string)
+	log.Printf("검색 옵션: %v", projectName)
+	var results []Project
+
+	_, resp, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
+		Search: &projectName,
+		ListOptions: gitlab.ListOptions{
+			PerPage: 1,
+			Page:    1,
+		},
+		MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
+	})
+	projectCount := resp.TotalItems
+
+	for i := range (projectCount / 100) + 1 {
+		result, _, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
+			Search: &projectName,
+			ListOptions: gitlab.ListOptions{
+				PerPage: 100,
+				Page:    i,
+			},
+			// Membership:     gitlab.Ptr(true),
+			MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
+		})
+
+		for _, p := range result {
+			accessLevel := func(project gitlab.Project) int {
+				accessLevel := 0
+				if project.Permissions == nil {
+					return accessLevel
+				}
+
+				if project.Permissions.ProjectAccess != nil {
+					accessLevel = max(accessLevel, int(project.Permissions.ProjectAccess.AccessLevel))
+				}
+
+				if project.Permissions.GroupAccess != nil {
+					accessLevel = max(accessLevel, int(project.Permissions.GroupAccess.AccessLevel))
+				}
+
+				return accessLevel
+
+			}(*p)
+
+			results = append(results, Project{
+				ProjectId:          p.ID,
+				ProjectName:        p.Name,
+				ProjectAccessLevel: accessLevel,
+				ProjectLink:        p.WebURL,
+			})
+		}
+	}
+	log.Printf("[worker-%v] first done | %v", workerId, results)
+	return results, nil
 }

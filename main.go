@@ -243,13 +243,9 @@ func main() {
 
 	})
 
-	e.GET("/statics", func(c echo.Context) error {
-		token := getToken(c)
-
-		if token == nil {
-			return c.Redirect(http.StatusUnauthorized, "/")
-
-		}
+	e.GET("/statistics", func(c echo.Context) error {
+		_client := getClient(c)
+		Statistics(_client)
 
 		return c.Render(http.StatusOK, "/main.html", "")
 	})
