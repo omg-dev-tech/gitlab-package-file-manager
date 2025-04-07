@@ -80,6 +80,19 @@
         $("#clean-selected").on("click", function (e) {
           var selected = $("#projectTable").bootstrapTable("getSelections");
           if (selected.length > 0) {
+            // 로딩 표시 시작
+            Swal.fire({
+              title: 'Deleting...',
+              html: 'Deleting packages from selected projects',
+              allowOutsideClick: false,
+              allowEscapeKey: false,
+              allowEnterKey: false,
+              showConfirmButton: false,
+              didOpen: () => {
+                Swal.showLoading();
+              }
+            });
+
             selected = selected.map(function (element) {
               return {
                 ProjectId: element.ProjectId,
@@ -103,17 +116,17 @@
                 console.log(textStatus);
                 console.log(jqXHR);
                 Swal.fire({
-                  text: "삭제가 성공했습니다.",
+                  text: "Delete operation successful.",
                   icon: "success",
                 });
                 $("#projectTable").bootstrapTable("refresh");
               })
               .fail(function (jqXHR, textStatus, errorThrown) {
                 Swal.fire({
-                  text: "오류가 발생했습니다.",
+                  text: "An error occurred.",
                   text: errorThrown,
                   icon: "error",
-                  confirmButtonText: "확인",
+                  confirmButtonText: "OK",
                 });
               });
           }
