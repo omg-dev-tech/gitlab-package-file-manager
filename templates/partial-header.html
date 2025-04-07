@@ -18,8 +18,19 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="navbarToggler">
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+          <li class="nav-item dropdown">
+						<a class='nav-link dropdown-toggle{{if eq .categoryNm "statistics"}} active{{end}}' href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">statistics</a>
+						<ul class="dropdown-menu">
+							<li><a class='dropdown-item{{if eq .menuNm "project"}} active{{end}}' href="/statistics/projects">About Projects</a></li>
+							<li><a class='dropdown-item{{if eq .menuNm "package"}} active{{end}}' href="/statistics/packages">About Packages</a></li>
+						</ul>
+					</li>
+        </ul>
+      </div>
+      <div class="collapse navbar-collapse" id="navbarToggler">
         <ul class="navbar-nav me-auto mb-2 mb-lg-0"></ul>
-        <form action="/logout" method="POST" >
+        <form action="/logout" method="POST">
           <input type="hidden" name="X-XSRF-TOKEN" value="{{ .CsrfToken }}" />
           <span class="input-group">
             <button class="btn btn-outline-light" type="submit">

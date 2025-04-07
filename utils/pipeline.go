@@ -71,6 +71,10 @@ func run(
 						continue
 					}
 
+					if res == nil {
+						continue
+					}
+
 					resValue := reflect.ValueOf(res)
 					if resValue.Kind() == reflect.Slice || resValue.Kind() == reflect.Array {
 						for j := 0; j < resValue.Len(); j++ {

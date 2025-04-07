@@ -10,11 +10,8 @@
     {{ block "partial-script" . }}{{ end }}
     <script>
       $(function () {
+
         $("#projectTable").bootstrapTable({
-          url: "/search",
-          method: "GET",
-          contentType: "application/json",
-          dataType: "json",
           responseHandler: (res) => {
             return res.data;
           },
@@ -70,11 +67,14 @@
           sortOrder: "desc",
           pagination: true,
           paginationLoadMore: true,
-          toolbar: "#toolbar"
+          toolbar: "#toolbar",
+          formatNoMatches: function () {
+            return "Please fill in the search criteria and click the search button. Otherwise, loading may be very slow."
+          }
         });
 
         $("#search").on("click", function (e) {
-          $("#projectTable").bootstrapTable("refresh", { url: "/search" });
+          $("#projectTable").bootstrapTable("refresh", { url: "/packages" });
         });
 
         $("#clean-selected").on("click", function (e) {

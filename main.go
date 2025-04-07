@@ -50,10 +50,8 @@ type Request[T any] struct {
 var clientStore = struct {
 	sync.RWMutex
 	clients map[string]*gitlab.Client
-	tokens  map[string]string
 }{
 	clients: make(map[string]*gitlab.Client),
-	tokens:  make(map[string]string),
 }
 
 func main() {
@@ -70,6 +68,7 @@ func main() {
 	// Set middleware for Logger & Recover
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+
 	// Set middleware for session
 	store := sessions.NewCookieStore([]byte("super-secret-key"))
 	store.Options = &sessions.Options{
@@ -97,16 +96,43 @@ func main() {
 	// GET: Login Page
 	e.GET("/", func(c echo.Context) error {
 		// check whether session exists
-		_client := getClient(c)
 		csrfToken := c.Get("csrf").(string)
 		response := Response{
 			CsrfToken: csrfToken,
 		}
+		_client := getClient(c)
 		if _client != nil {
-			response.Message = "Login Success"
-			return c.Render(http.StatusOK, "index.html", response)
+			return c.Redirect(http.StatusFound, "/statistics/projects")
 		}
 		return c.Render(http.StatusOK, "login.html", response)
+	})
+
+	e.GET("/statistics/projects", func(c echo.Context) error {
+		_client := getClient(c)
+		csrfToken := c.Get("csrf").(string)
+		if _client == nil {
+			return c.Redirect(http.StatusFound, "/")
+		}
+
+		return c.Render(http.StatusOK, "project.html", map[string]string{
+			"categoryNm": "statistics",
+			"menuNm":     "project",
+			"CsrfToken":  csrfToken,
+		})
+	})
+
+	e.GET("/statistics/packages", func(c echo.Context) error {
+		csrfToken := c.Get("csrf").(string)
+		_client := getClient(c)
+		if _client == nil {
+			return c.Redirect(http.StatusFound, "/")
+		}
+
+		return c.Render(http.StatusOK, "package.html", map[string]string{
+			"categoryNm": "statistics",
+			"menuNm":     "package",
+			"CsrfToken":  csrfToken,
+		})
 	})
 
 	// POST: Submit Login Form (token, url)
@@ -117,8 +143,6 @@ func main() {
 		}
 		token := c.FormValue("token")
 		baseUrl := c.FormValue("baseUrl")
-
-		log.Printf("baseUrl: %v, token: %v", baseUrl, token)
 
 		if baseUrl == "" || token == "" {
 			log.Printf("입력 오류!!")
@@ -155,7 +179,6 @@ func main() {
 
 		clientStore.Lock()
 		clientStore.clients[sessionID] = client
-		clientStore.tokens[sessionID] = token
 		clientStore.Unlock()
 
 		return c.Redirect(http.StatusFound, "/")
@@ -163,9 +186,6 @@ func main() {
 	})
 
 	e.POST("/logout", func(c echo.Context) error {
-		// CSRF 토큰은 필요한 경우 로그 출력이나 추가 검증에 사용 가능
-		csrfToken := c.FormValue("X-XSRF-TOKEN")
-		log.Printf("Logout 요청 CSRF 토큰: %v", csrfToken)
 
 		// 세션 가져오기
 		sess, err := session.Get("session", c)
@@ -192,8 +212,7 @@ func main() {
 		return c.Redirect(http.StatusFound, "/")
 	})
 
-	// POST: 토큰이 권한을 가지고 있는 모든 프로젝트
-	e.GET("/search", func(c echo.Context) error {
+	e.GET("/packages", func(c echo.Context) error {
 
 		_client := getClient(c)
 
@@ -205,7 +224,7 @@ func main() {
 			fromFileCount := c.FormValue("fromFileCount")
 			toFileCount := c.FormValue("toFileCount")
 
-			projects := Search(_client, projectName, packageName, fromFileCount, toFileCount)
+			projects := GetPackages(_client, projectName, packageName, fromFileCount, toFileCount)
 			return c.JSON(http.StatusOK, map[string]interface{}{
 				"data":      projects,
 				"message":   "Search Success",
@@ -213,6 +232,26 @@ func main() {
 			})
 		}
 
+		return c.Redirect(http.StatusTemporaryRedirect, "/login")
+	})
+
+	e.GET("/projects", func(c echo.Context) error {
+		_client := getClient(c)
+
+		csrfToken := c.Get("csrf").(string)
+		if _client != nil {
+
+			projectName := c.FormValue("projectName")
+			fromSize := c.FormValue("fromSize")
+			toSize := c.FormValue("toSize")
+
+			projects := GetProjects(_client, projectName, fromSize, toSize)
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"data":      projects,
+				"message":   "Search Success",
+				"CsrfToken": csrfToken,
+			})
+		}
 		return c.Redirect(http.StatusTemporaryRedirect, "/login")
 	})
 
@@ -229,7 +268,6 @@ func main() {
 			})
 		}
 
-		log.Printf("Input Data: %v", request)
 		if _client != nil {
 			results := Clean(_client, request.Data)
 			return c.JSON(http.StatusOK, map[string]interface{}{
@@ -241,13 +279,6 @@ func main() {
 
 		return c.Redirect(http.StatusTemporaryRedirect, "/login")
 
-	})
-
-	e.GET("/statistics", func(c echo.Context) error {
-		_client := getClient(c)
-		Statistics(_client)
-
-		return c.Render(http.StatusOK, "/main.html", "")
 	})
 
 	e.Logger.Fatal(e.Start(":" + strconv.Itoa(*port)))
@@ -273,28 +304,6 @@ func getClient(c echo.Context) *gitlab.Client {
 	}
 
 	return client
-}
-
-func getToken(c echo.Context) *string {
-	sess, err := session.Get("session", c)
-	if err != nil {
-		return nil
-	}
-
-	sessionID, ok := sess.Values["session_id"].(string)
-	if !ok || sessionID == "" {
-		return nil
-	}
-
-	clientStore.RLock()
-	token, exists := clientStore.tokens[sessionID]
-	clientStore.RUnlock()
-
-	if !exists {
-		return nil
-	}
-
-	return &token
 }
 
 func generateSessionID() string {
