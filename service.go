@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gitlab-asset-cleaner/utils"
+	"gitlab-package-file-manager/utils"
 	"sort"
 	"strconv"
 	"strings"
