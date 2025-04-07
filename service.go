@@ -153,7 +153,8 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 
 		response, err := client.Packages.DeletePackageFile(packageFile.ProjectId, packageFile.PackageId, packageFile.PackageFileId)
 		if err != nil {
-			return fmt.Sprint("%d, %d, %d Error: %v", packageFile.ProjectId, packageFile.PackageId, packageFile.PackageFileId, err), err
+			return fmt.Sprint("Project ID: %d, Package ID: %d, Package File ID: %d - Delete Failed: %v",
+				packageFile.ProjectId, packageFile.PackageId, packageFile.PackageFileId, err), err
 		} else {
 			return response, nil
 		}

@@ -145,7 +145,7 @@ func main() {
 		baseUrl := c.FormValue("baseUrl")
 
 		if baseUrl == "" || token == "" {
-			log.Printf("입력 오류!!")
+			log.Printf("Input Error!!")
 			response.Message = "Gitlab API URL and Private Token should exist"
 			return c.Render(http.StatusOK, "login.html", response)
 		}
@@ -153,20 +153,20 @@ func main() {
 		client, err := gitlab.NewClient(token, gitlab.WithBaseURL(baseUrl))
 
 		if err != nil {
-			log.Printf("클라이언트 생성 오류: %v", err.Error())
-			response.Message = "클라이언트 생성 오류: " + err.Error()
+			log.Printf("Client creation error: %v", err.Error())
+			response.Message = "Client creation error: " + err.Error()
 			return c.Render(http.StatusInternalServerError, "login.html", response)
 		}
 
 		if _, _, err := client.Users.CurrentUser(); err != nil {
-			response.Message = "올바르지 않은 토큰 값입니다."
+			response.Message = "Invalid token value"
 			return c.Render(http.StatusUnauthorized, "login.html", response)
 		}
 
 		// 세션 가져오기
 		sess, err := session.Get("session", c)
 		if err != nil {
-			response.Message = "세션 오류: " + err.Error()
+			response.Message = "Session error: " + err.Error()
 			return c.Render(http.StatusInternalServerError, "login.html", response)
 		}
 
@@ -190,8 +190,7 @@ func main() {
 		// 세션 가져오기
 		sess, err := session.Get("session", c)
 		if err != nil {
-			// 세션이 이미 파기된 경우도 있으므로 에러 로깅 후 리다이렉트
-			log.Printf("세션 가져오기 오류: %v", err)
+			log.Printf("Session retrieval error: %v", err)
 			return c.Redirect(http.StatusFound, "/")
 		}
 
@@ -206,7 +205,7 @@ func main() {
 		// 세션을 삭제 (쿠키 삭제를 위해 MaxAge를 -1로 설정)
 		sess.Options.MaxAge = -1
 		if err := sess.Save(c.Request(), c.Response()); err != nil {
-			log.Printf("세션 삭제 오류: %v", err)
+			log.Printf("Session deletion error: %v", err)
 		}
 
 		return c.Redirect(http.StatusFound, "/")
