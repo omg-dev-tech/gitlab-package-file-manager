@@ -1,4 +1,4 @@
-module gitlab-asset-cleaner
+module gitlab-package-file-manager
 
 go 1.24.1
 
