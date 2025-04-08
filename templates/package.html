@@ -10,7 +10,6 @@
     {{ block "partial-script" . }}{{ end }}
     <script>
       $(function () {
-
         $("#projectTable").bootstrapTable({
           responseHandler: (res) => {
             return res.data;
@@ -69,8 +68,8 @@
           paginationLoadMore: true,
           toolbar: "#toolbar",
           formatNoMatches: function () {
-            return "Please fill in the search criteria and click the search button. Otherwise, loading may be very slow."
-          }
+            return "Please fill in the search criteria and click the search button. Otherwise, loading may be very slow.";
+          },
         });
 
         $("#search").on("click", function (e) {
@@ -80,55 +79,75 @@
         $("#clean-selected").on("click", function (e) {
           var selected = $("#projectTable").bootstrapTable("getSelections");
           if (selected.length > 0) {
-            // 로딩 표시 시작
+            // Confirm
             Swal.fire({
-              title: 'Deleting...',
-              html: 'Deleting packages from selected projects',
-              allowOutsideClick: false,
-              allowEscapeKey: false,
-              allowEnterKey: false,
-              showConfirmButton: false,
-              didOpen: () => {
-                Swal.showLoading();
+              title: "Are you sure?",
+              text: "You won't be able to revert this!",
+              icon: "warning",
+              showCancelButton: true,
+              confirmButtonColor: "#3085d6",
+              cancelButtonColor: "#d33",
+              confirmButtonText: "Yes, clean it!",
+            }).then((result) => {
+              if (result.isConfirmed) {
+                // 로딩 표시 시작
+                Swal.fire({
+                  title: "Deleting...",
+                  html: "Deleting packages from selected projects",
+                  allowOutsideClick: false,
+                  allowEscapeKey: false,
+                  allowEnterKey: false,
+                  showConfirmButton: false,
+                  didOpen: () => {
+                    Swal.showLoading();
+                  },
+                });
+
+                selected = selected.map(function (element) {
+                  return {
+                    ProjectId: element.ProjectId,
+                    PackageId: element.PackageId,
+                  };
+                });
+
+                console.log(selected);
+                $.ajax({
+                  url: "/clean",
+                  method: "POST",
+                  data: JSON.stringify({ data: selected }),
+                  headers: {
+                    "X-XSRF-TOKEN": "{{ .CsrfToken }}",
+                  },
+                  contentType: "application/json; charset=utf-8",
+                  dataType: "json",
+                })
+                  .done(function (data, textStatus, jqXHR) {
+                    console.log(data);
+                    console.log(textStatus);
+                    console.log(jqXHR);
+                    Swal.fire({
+                      text: "Delete operation successful.",
+                      icon: "success",
+                    });
+                    $("#projectTable").bootstrapTable("refresh");
+                  })
+                  .fail(function (jqXHR, textStatus, errorThrown) {
+                    Swal.fire({
+                      text: "An error occurred.",
+                      text: errorThrown,
+                      icon: "error",
+                      confirmButtonText: "OK",
+                    });
+                  });
               }
             });
-
-            selected = selected.map(function (element) {
-              return {
-                ProjectId: element.ProjectId,
-                PackageId: element.PackageId,
-              };
-            });
-
-            console.log(selected);
-            $.ajax({
-              url: "/clean",
-              method: "POST",
-              data: JSON.stringify({ data: selected }),
-              headers: {
-                'X-XSRF-TOKEN': '{{ .CsrfToken }}',
-              },
-              contentType: "application/json; charset=utf-8",
-              dataType: "json",
+          } else {
+            Swal.fire({
+              title: "Error",
+              html: "No row is selected.",
+              icon: "error",
+              confirmButtonText: "OK",
             })
-              .done(function (data, textStatus, jqXHR) {
-                console.log(data);
-                console.log(textStatus);
-                console.log(jqXHR);
-                Swal.fire({
-                  text: "Delete operation successful.",
-                  icon: "success",
-                });
-                $("#projectTable").bootstrapTable("refresh");
-              })
-              .fail(function (jqXHR, textStatus, errorThrown) {
-                Swal.fire({
-                  text: "An error occurred.",
-                  text: errorThrown,
-                  icon: "error",
-                  confirmButtonText: "OK",
-                });
-              });
           }
         });
       });
@@ -172,22 +191,21 @@
                 >File Count Range</label
               >
               <div class="input-group">
-
                 <input
-                id="fromFileCount"
-                name="fromFileCount"
-                type="text"
-                class="form-control"
-                placeholder="from"
-              />
-              <input
-              id="toFileCount"
-              name="toFileCount"
-              type="text"
-              class="form-control"
-              placeholder="to"
-              />
-            </div>
+                  id="fromFileCount"
+                  name="fromFileCount"
+                  type="text"
+                  class="form-control"
+                  placeholder="from"
+                />
+                <input
+                  id="toFileCount"
+                  name="toFileCount"
+                  type="text"
+                  class="form-control"
+                  placeholder="to"
+                />
+              </div>
             </div>
           </div>
         </form>
@@ -203,9 +221,7 @@
             Clean Selected
           </button>
         </div>
-        <table id="projectTable" style="table-layout: fixed">
-
-        </table>
+        <table id="projectTable" style="table-layout: fixed"></table>
       </div>
     </main>
   </body>

@@ -170,43 +170,70 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 	return resultList
 }
 
-func GetProjects(client *gitlab.Client, projectName string, fromSize string, toSize string) []Project {
+func GetProjects(client *gitlab.Client, offset int, limit int, projectName string, fromSize string, toSize string) []Project {
 	isStatistics := true
-
-	resultC := utils.New(func(inC chan interface{}) {
-		inC <- nil
-		close(inC)
-	}, client).Pipe(getProject, projectName).Pipe(func(input interface{}, client *gitlab.Client, workerId int, a ...any) (interface{}, error) {
-
-		project := input.(Project)
-		projectId := project.ProjectId
-		projectInfo, _, _ := client.Projects.GetProject(projectId, &gitlab.GetProjectOptions{
-			Statistics: &isStatistics,
+	// total count 를 구함
+	// project 를 구할 때 offset 과 limit 으로 지정된 것만 구함
+	_, resp, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
+		Search: &projectName,
+		ListOptions: gitlab.ListOptions{
+			PerPage: 1,
+			Page:    1,
+		},
+		MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
+	})
+	totalCount := resp.TotalItems
+	var results []Project
+	for i := range (totalCount / 100) + 1 {
+		result, _, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
+			Search: &projectName,
+			ListOptions: gitlab.ListOptions{
+				PerPage: 100,
+				Page:    i,
+			},
+			Statistics:     &isStatistics,
+			MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
 		})
 
-		from, _ := strconv.Atoi(fromSize)
-		to, err := strconv.Atoi(toSize)
-		if err != nil || to == 0 {
-			to = 999999
-		}
-		packageRegistrySize := int(projectInfo.Statistics.PackagesSize) / 1024 / 1024
-		if from <= packageRegistrySize && packageRegistrySize <= to {
+		for _, p := range result {
+			accessLevel := func(project gitlab.Project) int {
+				accessLevel := 0
+				if project.Permissions == nil {
+					return accessLevel
+				}
 
-			project.PackageRegistrySize = packageRegistrySize
+				if project.Permissions.ProjectAccess != nil {
+					accessLevel = max(accessLevel, int(project.Permissions.ProjectAccess.AccessLevel))
+				}
 
-			return project, nil
-		}
+				if project.Permissions.GroupAccess != nil {
+					accessLevel = max(accessLevel, int(project.Permissions.GroupAccess.AccessLevel))
+				}
 
-		return nil, nil
-	}, "").Merge()
+				return accessLevel
 
-	var resultList []Project
-	for result := range resultC {
-		if response, ok := result.(Project); ok {
-			resultList = append(resultList, response)
+			}(*p)
+
+			from, _ := strconv.Atoi(fromSize)
+			to, err := strconv.Atoi(toSize)
+			if err != nil || to == 0 {
+				to = 999999
+			}
+			packageRegistrySize := int(p.Statistics.PackagesSize) / 1024 / 1024
+
+			if from <= packageRegistrySize && packageRegistrySize <= to {
+				results = append(results, Project{
+					ProjectId:           p.ID,
+					ProjectName:         p.Name,
+					ProjectAccessLevel:  accessLevel,
+					ProjectLink:         p.WebURL,
+					PackageRegistrySize: packageRegistrySize,
+				})
+			}
 		}
 	}
-	return resultList
+
+	return results
 }
 
 func getProject(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {

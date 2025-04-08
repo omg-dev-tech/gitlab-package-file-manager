@@ -235,6 +235,12 @@ func main() {
 	})
 
 	e.GET("/projects", func(c echo.Context) error {
+
+		offset, _ := strconv.Atoi(c.QueryParam("offset"))
+		limit, _ := strconv.Atoi(c.QueryParam("limit"))
+		// criteria := c.QueryParam("sort")
+		// order := c.QueryParam("order")
+
 		_client := getClient(c)
 
 		csrfToken := c.Get("csrf").(string)
@@ -244,9 +250,61 @@ func main() {
 			fromSize := c.FormValue("fromSize")
 			toSize := c.FormValue("toSize")
 
-			projects := GetProjects(_client, projectName, fromSize, toSize)
+			projects := GetProjects(_client, offset, limit, projectName, fromSize, toSize)
+
+			// sort.Slice(projects, func(i, j int) bool {
+
+			// 	var prev any
+			// 	var next any
+
+			// 	if criteria == "" {
+			// 		prev = i
+			// 		next = j
+			// 	}
+
+			// 	if criteria == "PackageRegistrySize" {
+			// 		prev = projects[i].PackageRegistrySize
+			// 		next = projects[j].PackageRegistrySize
+			// 	}
+
+			// 	if criteria == "ProjectName" {
+			// 		prev = projects[i].ProjectName
+			// 		next = projects[j].ProjectName
+			// 	}
+
+			// 	switch prev.(type) {
+			// 	case string:
+			// 		{
+			// 			if order == "desc" {
+
+			// 				return prev.(string) > next.(string)
+			// 			} else {
+			// 				return prev.(string) < next.(string)
+			// 			}
+			// 		}
+			// 	case int:
+			// 		{
+			// 			if order == "desc" {
+
+			// 				return prev.(int) > next.(int)
+			// 			} else {
+			// 				return prev.(int) < next.(int)
+			// 			}
+			// 		}
+			// 	default:
+			// 		{
+			// 			if order == "desc" {
+			// 				return i > j
+			// 			} else {
+			// 				return i < j
+			// 			}
+			// 		}
+			// 	}
+
+			// })
 			return c.JSON(http.StatusOK, map[string]interface{}{
-				"data":      projects,
+				"rows":      projects,
+				"total":     len(projects),
 				"message":   "Search Success",
 				"CsrfToken": csrfToken,
 			})
