@@ -10,23 +10,122 @@
     {{ block "partial-script" . }}{{ end }}
     <script>
       $(function () {
-        var modal = new bootstrap.Modal($('#modal'), {
-        })
-        $('#modal').on
-        $("#projectTable").bootstrapTable({
-          url: "/projects",
-          method: "GET",
-          contentType: "application/json",
-          dataType: "json",
-          // responseHandler: (res) => {
-          //   return res.data;
-          // },
-          queryParams: function (params) {
-            $.each($("#searchOption :input[name]"), (index, value) => {
-              params[$(value).attr("name")] = $(value).val();
+        var modal = new bootstrap.Modal($("#modal"), {});
+        $("#modal").on;
+        $("#projectTable")
+          .bootstrapTable({
+            url: "/projects",
+            method: "GET",
+            contentType: "application/json",
+            dataType: "json",
+            // responseHandler: (res) => {
+            //   return res.data;
+            // },
+            queryParams: function (params) {
+              $.each($("#searchOption :input[name]"), (index, value) => {
+                params[$(value).attr("name")] = $(value).val();
+              });
+              return params;
+            },
+            columns: [
+              {
+                field: "checked",
+                checkbox: true,
+                width: "4.5",
+                widthUnit: "%",
+              },
+              {
+                title: "Package<br>Info",
+                field: "ProjectId",
+                formatter: function (value, row, index, field) {
+                  if (value) {
+                    return (
+                      '<a href="#" class="detail" data-ProjectId="' +
+                      value +
+                      '"><i class="fa-solid fa-square-arrow-up-right"></i></a>'
+                    );
+                  }
+                  return "";
+                },
+                width: "5.5",
+                widthUnit: "%",
+                align: "center",
+              },
+              {
+                title: "Project Name",
+                field: "ProjectName",
+                formatter: function (value, row, index, field) {
+                  return '<a href="' + row.ProjectLink + '" >' + value + "</a>";
+                },
+                sortable: true,
+                width: "10",
+                widthUnit: "%",
+              },
+              {
+                title: "Project Description",
+                field: "Description",
+                sortable: true,
+                width: "30",
+                widthUnit: "%",
+              },
+              {
+                title: "Owner",
+                field: "Owner",
+                sortable: true,
+                width: "10",
+                widthUnit: "%",
+              },
+              {
+                title: "Package Registry<br>Size (MB)",
+                field: "PackageRegistrySize",
+                sortable: true,
+                width: "10",
+                widthUnit: "%",
+              },
+              {
+                title: "RepositorySize<br>(MB)",
+                field: "RepositorySize",
+                sortable: true,
+                width: "10",
+                widthUnit: "%",
+              },
+            ],
+            showRefresh: false,
+            sortOrder: "asc",
+            // sidePagination: "server",
+            toolbar: "#toolbar",
+            pageList: [10, 15, 25, 50],
+            pagination: true,
+          })
+          .on("click", ".detail", function (e) {
+            $.ajax({
+              method: "GET",
+              url: "/packages?projectId=" + $(this).data("projectid"),
+              headers: {
+                "X-XSRF-TOKEN": "{{ .CsrfToken }}",
+              },
+            }).done(function (data, textStatus, jqXHR) {
+              // $("#modal").one("shown.bs.modal", function (e) {
+              //   autosize.update($("textarea"));
+              // });
+              if (data.data === null || data.data.length == 0) {
+                $("#packages").bootstrapTable("removeAll");
+                Swal.fire({
+                  title: "No Package",
+                  text: "Package does not exist",
+                  icon: "error",
+                  confirmButtonText: "OK",
+                });
+                modal.hide();
+              } else {
+                $("#packages").bootstrapTable("removeAll");
+                $("#packages").bootstrapTable("load", data.data);
+                modal.show();
+              }
             });
-            return params;
-          },
+          });
+
+        $("#packages").bootstrapTable({
           columns: [
             {
               field: "checked",
@@ -38,25 +137,37 @@
               visible: false,
             },
             {
-              title: "Project Name",
-              field: "ProjectName",
+              title: "Package ID",
+              field: "PackageId",
+              visible: false,
+            },
+            {
+              title: "Packge Name",
+              field: "PackageName",
               formatter: function (value, row, index, field) {
-                return '<a href="' + row.ProjectLink + '" >' + value + "</a>";
+                return '<a href="' + row.PackageLink + '" >' + value + "</a>";
               },
               sortable: true,
             },
             {
-              title: "Package Registry Size (MB)",
-              field: "PackageRegistrySize",
+              title: "Package Version",
+              field: "Version",
+              sortable: true,
+            },
+            {
+              title: "Package File Count",
+              field: "PackageFileCount",
+              sortable: true,
+            },
+            {
+              title: "Package File Size (MB)",
+              field: "PackageFileSize",
               sortable: true,
             },
           ],
-          showRefresh: false,
-          sortOrder: "asc",
-          // sidePagination: "server",
-          toolbar: "#toolbar",
-          pageList: [10, 15, 25, 50],
-          pagination: true,
+          responseHandler: (res) => {
+            return res.data;
+          },
         });
 
         $("#search").on("click", function (e) {
@@ -69,7 +180,7 @@
             // Confirm
             Swal.fire({
               title: "Are you sure?",
-              text: "You won't be able to revert this!",
+              text: "You won't be able to revert this. It Will remain 20 file assets.",
               icon: "warning",
               showCancelButton: true,
               confirmButtonColor: "#3085d6",
@@ -97,7 +208,6 @@
                   };
                 });
 
-                console.log(selected);
                 $.ajax({
                   url: "/clean",
                   method: "POST",
@@ -109,14 +219,84 @@
                   dataType: "json",
                 })
                   .done(function (data, textStatus, jqXHR) {
-                    console.log(data);
-                    console.log(textStatus);
-                    console.log(jqXHR);
                     Swal.fire({
-                      text: "Delete operation successful.",
+                      text: "Clean operation successful.",
                       icon: "success",
                     });
                     $("#projectTable").bootstrapTable("refresh");
+                  })
+                  .fail(function (jqXHR, textStatus, errorThrown) {
+                    Swal.fire({
+                      text: "An error occurred.",
+                      text: errorThrown,
+                      icon: "error",
+                      confirmButtonText: "OK",
+                    });
+                  });
+              }
+            });
+          } else {
+            Swal.fire({
+              title: "Error",
+              html: "No row is selected.",
+              icon: "error",
+              confirmButtonText: "OK",
+            });
+          }
+        });
+
+        $("#clean-modal-selected").on("click", function (e) {
+          var selected = $("#packages").bootstrapTable("getSelections");
+          if (selected.length > 0) {
+            // Confirm
+            Swal.fire({
+              title: "Are you sure?",
+              text: "You won't be able to revert this. It Will remain 20 file assets.",
+              icon: "warning",
+              showCancelButton: true,
+              confirmButtonColor: "#3085d6",
+              cancelButtonColor: "#d33",
+              confirmButtonText: "Yes, clean it!",
+            }).then((result) => {
+              if (result.isConfirmed) {
+                // 로딩 표시 시작
+                Swal.fire({
+                  title: "Deleting...",
+                  html: "Deleting packages from selected projects",
+                  allowOutsideClick: false,
+                  allowEscapeKey: false,
+                  allowEnterKey: false,
+                  showConfirmButton: false,
+                  didOpen: () => {
+                    Swal.showLoading();
+                  },
+                });
+
+                selected = selected.map(function (element) {
+                  return {
+                    ProjectId: element.ProjectId,
+                    PackageId: element.PackageId,
+                  };
+                });
+
+                $.ajax({
+                  url: "/clean",
+                  method: "POST",
+                  data: JSON.stringify({ data: selected }),
+                  headers: {
+                    "X-XSRF-TOKEN": "{{ .CsrfToken }}",
+                  },
+                  contentType: "application/json; charset=utf-8",
+                  dataType: "json",
+                })
+                  .done(function (data, textStatus, jqXHR) {
+                    Swal.fire({
+                      text: "Clean operation successful.",
+                      icon: "success",
+                    });
+                    $("#packages").bootstrapTable("refresh", {
+                      url: "/packages?projectId=" + selected[0].ProjectId,
+                    });
                   })
                   .fail(function (jqXHR, textStatus, errorThrown) {
                     Swal.fire({
@@ -147,63 +327,47 @@
       <div
         class="modal fade"
         id="modal"
-        daata-bs-backdrop="static"
+        data-bs-backdrop="static"
         tabindex="-1"
         aria-labelledby="라벨"
         aria-hidden="true"
       >
         <div class="modal-dialog modal-xl">
           <div class="modal-content">
-            <form
-              id="양식"
-              action="{{springMacroRequestContext.contextPath}}/{{encode '자료'}}/{{encode cName}}/{{encode tName}}"
-              method="POST"
-              enctype="multipart/form-data"
-            >
-              <input
-                type="hidden"
-                name="CsrfToken"
-                value="{{.CsrfToken}}"
-              />
-              <input type="hidden" name="projectId" id="projectId" />
-              <div class="modal-header">
-                <h1 class="modal-title fs-5" id="라벨">
-                  <i class="fa-fw fa-solid fa-pen-to-square"></i> Project Package Info
-                </h1>
-                <button
-                  type="button"
-                  class="btn-close"
-                  data-bs-dismiss="modal"
-                  aria-label="Close"
-                ></button>
-              </div>
-              <div class="modal-body">
-                <div class="container-fluid">
-                  <div class="row"></div>
+            <div class="modal-header">
+              <h1 class="modal-title fs-5" id="라벨">
+                <i class="fa-fw fa-solid fa-pen-to-square"></i> Package Info
+              </h1>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <div class="container-fluid">
+                <div class="row">
+                  <div class="mb-3 col-12">
+                    <div class="form-label fw-bold text-primary">
+                      Package Table
+                    </div>
+                  </div>
+                  <div class="mb-3 col-12">
+                    <button
+                      id="clean-modal-selected"
+                      type="button"
+                      class="btn btn-outline-dark"
+                    >
+                    <i class="fa-solid fa-eraser"></i> Clean Selected
+                    </button>
+                  </div>
+                  <div class="mb-3 col-12">
+                    <table id="packages"></table>
+                  </div>
                 </div>
               </div>
-              <div class="modal-footer justify-content-between">
-                <span>
-                  <button
-                    id="다음"
-                    type="button"
-                    class="btn btn-outline-secondary"
-                    title="다음"
-                  >
-                    <i class="fa-fw fa-solid fa-angle-up"></i>다음
-                  </button>
-                  <button
-                    id="이전"
-                    type="button"
-                    class="btn btn-outline-secondary"
-                    title="이전"
-                  >
-                    이전<i class="fa-fw fa-solid fa-angle-down"></i>
-                  </button>
-                </span>
-             
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       </div>
@@ -254,11 +418,11 @@
       <!-- 테이블 영역 -->
       <div class="container-fluid">
         <div id="toolbar" class="w-100">
-          <button id="search" type="button" class="btn btn-success">
-            Search
+          <button id="search" type="button" class="btn btn-outline-dark">
+            <i class="fa-solid fa-magnifying-glass"></i> Search
           </button>
-          <button id="clean-selected" type="button" class="btn btn-danger">
-            Clean Selected
+          <button id="clean-selected" type="button" class="btn btn-outline-dark">
+            <i class="fa-solid fa-eraser"></i> Clean Selected
           </button>
         </div>
         <table id="projectTable" style="table-layout: fixed"></table>

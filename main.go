@@ -218,14 +218,11 @@ func main() {
 		csrfToken := c.Get("csrf").(string)
 		if _client != nil {
 
-			projectName := c.FormValue("projectName")
-			packageName := c.FormValue("packageName")
-			fromFileCount := c.FormValue("fromFileCount")
-			toFileCount := c.FormValue("toFileCount")
+			projectId, _ := strconv.Atoi(c.QueryParam("projectId"))
 
-			projects := GetPackages(_client, projectName, packageName, fromFileCount, toFileCount)
+			packages := GetPackages(_client, projectId)
 			return c.JSON(http.StatusOK, map[string]interface{}{
-				"data":      projects,
+				"data":      packages,
 				"message":   "Search Success",
 				"CsrfToken": csrfToken,
 			})
@@ -238,8 +235,6 @@ func main() {
 
 		offset, _ := strconv.Atoi(c.QueryParam("offset"))
 		limit, _ := strconv.Atoi(c.QueryParam("limit"))
-		// criteria := c.QueryParam("sort")
-		// order := c.QueryParam("order")
 
 		_client := getClient(c)
 
@@ -252,56 +247,6 @@ func main() {
 
 			projects := GetProjects(_client, offset, limit, projectName, fromSize, toSize)
 
-			// sort.Slice(projects, func(i, j int) bool {
-
-			// 	var prev any
-			// 	var next any
-
-			// 	if criteria == "" {
-			// 		prev = i
-			// 		next = j
-			// 	}
-
-			// 	if criteria == "PackageRegistrySize" {
-			// 		prev = projects[i].PackageRegistrySize
-			// 		next = projects[j].PackageRegistrySize
-			// 	}
-
-			// 	if criteria == "ProjectName" {
-			// 		prev = projects[i].ProjectName
-			// 		next = projects[j].ProjectName
-			// 	}
-
-			// 	switch prev.(type) {
-			// 	case string:
-			// 		{
-			// 			if order == "desc" {
-
-			// 				return prev.(string) > next.(string)
-			// 			} else {
-			// 				return prev.(string) < next.(string)
-			// 			}
-			// 		}
-			// 	case int:
-			// 		{
-			// 			if order == "desc" {
-
-			// 				return prev.(int) > next.(int)
-			// 			} else {
-			// 				return prev.(int) < next.(int)
-			// 			}
-			// 		}
-			// 	default:
-			// 		{
-			// 			if order == "desc" {
-			// 				return i > j
-			// 			} else {
-			// 				return i < j
-			// 			}
-			// 		}
-			// 	}
-
-			// })
 			return c.JSON(http.StatusOK, map[string]interface{}{
 				"rows":      projects,
 				"total":     len(projects),
@@ -313,7 +258,7 @@ func main() {
 	})
 
 	e.POST("/clean", func(c echo.Context) error {
-		var request Request[[]PackageFile]
+		var request Request[[]Package]
 		_client := getClient(c)
 		csrfToken := c.Get("csrf").(string)
 		if err := c.Bind(&request); err != nil {
