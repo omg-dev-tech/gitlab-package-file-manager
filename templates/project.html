@@ -10,20 +10,106 @@
     {{ block "partial-script" . }}{{ end }}
     <script>
       $(function () {
-        $("#projectTable").bootstrapTable({
-          url: "/projects",
-          method: "GET",
-          contentType: "application/json",
-          dataType: "json",
-          responseHandler: (res) => {
-            return res.data;
-          },
-          queryParams: function (params) {
-            $.each($("#searchOption :input[name]"), (index, value) => {
-              params[$(value).attr("name")] = $(value).val();
-            });
-            return params;
-          },
+        var modal = new bootstrap.Modal($("#modal"), {});
+        var currentProjectId = null;
+
+        $("#modal").on;
+        $("#projectTable")
+          .bootstrapTable({
+            url: "/projects",
+            method: "GET",
+            contentType: "application/json",
+            dataType: "json",
+            // responseHandler: (res) => {
+            //   return res.data;
+            // },
+            queryParams: function (params) {
+              $.each($("#searchOption :input[name]"), (index, value) => {
+                params[$(value).attr("name")] = $(value).val();
+              });
+              return params;
+            },
+            columns: [
+              {
+                field: "checked",
+                checkbox: true,
+                width: "4.5",
+                widthUnit: "%",
+              },
+              {
+                title: "Package<br>Info",
+                field: "ProjectId",
+                formatter: function (value, row, index, field) {
+                  if (value) {
+                    return (
+                      '<a href="#" class="detail" data-ProjectId="' +
+                      value +
+                      '"><i class="fa-solid fa-square-arrow-up-right"></i></a>'
+                    );
+                  }
+                  return "";
+                },
+                width: "5.5",
+                widthUnit: "%",
+                align: "center",
+              },
+              {
+                title: "Project Name",
+                field: "ProjectName",
+                formatter: function (value, row, index, field) {
+                  return '<a href="' + row.ProjectLink + '" >' + value + "</a>";
+                },
+                sortable: true,
+                width: "10",
+                widthUnit: "%",
+              },
+              {
+                title: "Project Description",
+                field: "Description",
+                sortable: true,
+                width: "30",
+                widthUnit: "%",
+              },
+              {
+                title: "Owner",
+                field: "Owner",
+                sortable: true,
+                width: "10",
+                widthUnit: "%",
+              },
+              {
+                title: "Package Registry<br>Size (MB)",
+                field: "PackageRegistrySize",
+                sortable: true,
+                width: "10",
+                widthUnit: "%",
+              },
+              {
+                title: "RepositorySize<br>(MB)",
+                field: "RepositorySize",
+                sortable: true,
+                width: "10",
+                widthUnit: "%",
+              },
+            ],
+            showRefresh: false,
+            sortOrder: "asc",
+            // sidePagination: "server",
+            toolbar: "#toolbar",
+            pageList: [10, 15, 25, 50],
+            pagination: true,
+          })
+          .on("click", ".detail", function (e) {
+            e.preventDefault();
+            $("#packages").bootstrapTable("removeAll");
+            modal.show();
+            // 선택된 프로젝트의 ID를 저장
+            currentProjectId = $(this).data("projectid");
+            // packages 테이블을 refresh 시 query 파라미터로 자동 전달하도록 함
+            $("#packages").bootstrapTable("refresh");
+          });
+
+        $("#packages").bootstrapTable({
           columns: [
             {
               field: "checked",
@@ -35,24 +121,74 @@
               visible: false,
             },
             {
-              title: "Project Name",
-              field: "ProjectName",
-              formatter: function (value, row, index, field) {
-                return '<a href="' + row.ProjectLink + '" >' + value + "</a>";
-              },
-              sortable: true,
+              title: "Package ID",
+              field: "PackageId",
+              visible: false,
             },
             {
-              title: "Package Registry Size (MB)",
-              field: "PackageRegistrySize",
-              sortable: true,
+              title: "Packge Name",
+              field: "PackageName",
+              formatter: function (value, row, index, field) {
+                return '<a href="' + row.PackageLink + '" >' + value + "</a>";
+              },
+              // sortable: true,
+            },
+            {
+              title: "Package Version",
+              field: "Version",
+              // sortable: true,
+            },
+            {
+              title: "Package File Count",
+              field: "PackageFileCount",
+              // sortable: true,
+            },
+            {
+              title: "Package File Size (MB)",
+              field: "PackageFileSize",
+              // sortable: true,
             },
           ],
-          showRefresh: false,
-          sortOrder: "desc",
+          url: "/packages", // 서버의 URL로 변경 가능 (/packages 등)
+          method: "GET",
+          contentType: "application/json",
+          dataType: "json",
+          sidePagination: "server",
           pagination: true,
-          paginationLoadMore: true,
-          toolbar: "#toolbar"
+          pageList: [25],
+          pageSize: 25,
+          showRefresh: false,
+          sortOrder: "asc",
+          ajax: function (params) {
+            if (!currentProjectId) {
+              console.warn("projectId가 설정되지 않았습니다. 서버 호출 중단");
+              // projectId가 없으면 빈 결과를 반환해 테이블에 아무 데이터도 표시하지 않음
+              params.success({ total: 0, rows: [] });
+              return;
+            }
+            // projectId가 있으면, 기본 ajax 호출 실행 (혹은 jQuery.ajax 사용)
+            $.ajax({
+              url: params.url,
+              type: params.type,
+              data: params.data,
+              dataType: params.dataType,
+              success: function (res) {
+                params.success(res);
+              },
+              error: function (xhr) {
+                params.error(xhr);
+              },
+            });
+          },
+          queryParams: function (params) {
+            // bootstrap-table은 limit, offset 등의 기본 파라미터를 전달함
+            // 여기에 선택한 프로젝트의 ID를 추가함
+            if (currentProjectId) {
+              params.projectId = currentProjectId;
+            }
+
+            return params;
+          },
         });
 
         $("#search").on("click", function (e) {
@@ -62,55 +198,144 @@
         $("#clean-selected").on("click", function (e) {
           var selected = $("#projectTable").bootstrapTable("getSelections");
           if (selected.length > 0) {
-            // 로딩 표시 시작
+            // Confirm
             Swal.fire({
-              title: 'Deleting...',
-              html: 'Deleting packages from selected projects',
-              allowOutsideClick: false,
-              allowEscapeKey: false,
-              allowEnterKey: false,
-              showConfirmButton: false,
-              didOpen: () => {
-                Swal.showLoading();
+              title: "Are you sure?",
+              text: "You won't be able to revert this. It Will remain 20 file assets.",
+              icon: "warning",
+              showCancelButton: true,
+              confirmButtonColor: "#3085d6",
+              cancelButtonColor: "#d33",
+              confirmButtonText: "Yes, clean it!",
+            }).then((result) => {
+              if (result.isConfirmed) {
+                // 로딩 표시 시작
+                Swal.fire({
+                  title: "Deleting...",
+                  html: "Deleting packages from selected projects",
+                  allowOutsideClick: false,
+                  allowEscapeKey: false,
+                  allowEnterKey: false,
+                  showConfirmButton: false,
+                  didOpen: () => {
+                    Swal.showLoading();
+                  },
+                });
+
+                selected = selected.map(function (element) {
+                  return {
+                    ProjectId: element.ProjectId,
+                    PackageId: element.PackageId,
+                  };
+                });
+
+                $.ajax({
+                  url: "/clean",
+                  method: "POST",
+                  data: JSON.stringify({ data: selected }),
+                  headers: {
+                    "X-XSRF-TOKEN": "{{ .CsrfToken }}",
+                  },
+                  contentType: "application/json; charset=utf-8",
+                  dataType: "json",
+                })
+                  .done(function (data, textStatus, jqXHR) {
+                    Swal.fire({
+                      text: "Clean operation successful.",
+                      icon: "success",
+                    });
+                    $("#projectTable").bootstrapTable("refresh");
+                  })
+                  .fail(function (jqXHR, textStatus, errorThrown) {
+                    Swal.fire({
+                      text: "An error occurred.",
+                      text: errorThrown,
+                      icon: "error",
+                      confirmButtonText: "OK",
+                    });
+                  });
               }
             });
-
-            selected = selected.map(function (element) {
-              return {
-                ProjectId: element.ProjectId,
-                PackageId: null,
-              };
+          } else {
+            Swal.fire({
+              title: "Error",
+              html: "No row is selected.",
+              icon: "error",
+              confirmButtonText: "OK",
             });
+          }
+        });
 
-            console.log(selected);
-            $.ajax({
-              url: "/clean",
-              method: "POST",
-              data: JSON.stringify({ data: selected }),
-              headers: {
-                'X-XSRF-TOKEN': '{{ .CsrfToken }}',
-              },
-              contentType: "application/json; charset=utf-8",
-              dataType: "json",
-            })
-              .done(function (data, textStatus, jqXHR) {
-                console.log(data);
-                console.log(textStatus);
-                console.log(jqXHR);
+        $("#clean-modal-selected").on("click", function (e) {
+          var selected = $("#packages").bootstrapTable("getSelections");
+          if (selected.length > 0) {
+            // Confirm
+            Swal.fire({
+              title: "Are you sure?",
+              text: "You won't be able to revert this. It Will remain 20 file assets.",
+              icon: "warning",
+              showCancelButton: true,
+              confirmButtonColor: "#3085d6",
+              cancelButtonColor: "#d33",
+              confirmButtonText: "Yes, clean it!",
+            }).then((result) => {
+              if (result.isConfirmed) {
+                // 로딩 표시 시작
                 Swal.fire({
-                  text: "Delete operation successful.",
-                  icon: "success",
+                  title: "Deleting...",
+                  html: "Deleting packages from selected projects",
+                  allowOutsideClick: false,
+                  allowEscapeKey: false,
+                  allowEnterKey: false,
+                  showConfirmButton: false,
+                  didOpen: () => {
+                    Swal.showLoading();
+                  },
                 });
-                $("#projectTable").bootstrapTable("refresh");
-              })
-              .fail(function (jqXHR, textStatus, errorThrown) {
-                Swal.fire({
-                  text: "An error occurred.",
-                  text: errorThrown,
-                  icon: "error",
-                  confirmButtonText: "OK",
+
+                selected = selected.map(function (element) {
+                  return {
+                    ProjectId: element.ProjectId,
+                    PackageId: element.PackageId,
+                  };
                 });
-              });
+
+                $.ajax({
+                  url: "/clean",
+                  method: "POST",
+                  data: JSON.stringify({ data: selected }),
+                  headers: {
+                    "X-XSRF-TOKEN": "{{ .CsrfToken }}",
+                  },
+                  contentType: "application/json; charset=utf-8",
+                  dataType: "json",
+                })
+                  .done(function (data, textStatus, jqXHR) {
+                    Swal.fire({
+                      text: "Clean operation successful.",
+                      icon: "success",
+                    });
+                    $("#packages").bootstrapTable("refresh", {
+                      url: "/packages?projectId=" + selected[0].ProjectId,
+                    });
+                  })
+                  .fail(function (jqXHR, textStatus, errorThrown) {
+                    Swal.fire({
+                      text: "An error occurred.",
+                      text: errorThrown,
+                      icon: "error",
+                      confirmButtonText: "OK",
+                    });
+                  });
+              }
+            });
+          } else {
+            Swal.fire({
+              title: "Error",
+              html: "No row is selected.",
+              icon: "error",
+              confirmButtonText: "OK",
+            });
           }
         });
       });
@@ -118,8 +343,63 @@
   </head>
   <body>
     {{ block "partial-header" . }}{{ end }}
-    <!-- 검색 영역 -->
     <main>
+      <!-- modal sector -->
+      <div
+        class="modal fade"
+        id="modal"
+        data-bs-backdrop="static"
+        tabindex="-1"
+        aria-labelledby="라벨"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-xl">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h1 class="modal-title fs-5" id="라벨">
+                <i class="fa-fw fa-solid fa-pen-to-square"></i> Package Info
+              </h1>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <div class="container-fluid">
+                <div class="row">
+                  <div class="mb-3 col-12">
+                    <div class="form-label fw-bold text-primary">
+                      Package Table
+                    </div>
+                  </div>
+                  <div class="mb-3 col-12">
+                    <button
+                      id="clean-modal-selected"
+                      type="button"
+                      class="btn btn-outline-dark"
+                    >
+                      <i class="fa-solid fa-eraser"></i> clean files up selected
+                    </button>
+                    <!-- <button
+                      id="clean-modal-selected"
+                      type="button"
+                      class="btn btn-outline-dark"
+                    >
+                      <i class="fa-solid fa-trash"></i> delete selected packages
+                    </button> -->
+                  </div>
+                  <div class="mb-3 col-12">
+                    <table id="packages"></table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- search sector -->
       <div class="container">
         <form id="searchOption" action="/search" method="get" class="mb-4">
           <div class="pb-2 mt-4 mb-2 border-bottom">
@@ -143,22 +423,21 @@
                 >Package Registry Size Range (MB)</label
               >
               <div class="input-group">
-
                 <input
-                id="fromSize"
-                name="fromSize"
-                type="text"
-                class="form-control"
-                placeholder="from"
-              />
-              <input
-              id="toSize"
-              name="toSize"
-              type="text"
-              class="form-control"
-              placeholder="to"
-              />
-            </div>
+                  id="fromSize"
+                  name="fromSize"
+                  type="text"
+                  class="form-control"
+                  placeholder="from"
+                />
+                <input
+                  id="toSize"
+                  name="toSize"
+                  type="text"
+                  class="form-control"
+                  placeholder="to"
+                />
+              </div>
             </div>
           </div>
         </form>
@@ -167,16 +446,18 @@
       <!-- 테이블 영역 -->
       <div class="container-fluid">
         <div id="toolbar" class="w-100">
-          <button id="search" type="button" class="btn btn-success">
-            Search
+          <button id="search" type="button" class="btn btn-outline-dark">
+            <i class="fa-solid fa-magnifying-glass"></i> search
           </button>
-          <button id="clean-selected" type="button" class="btn btn-danger">
-            Clean Selected
+          <button
+            id="clean-selected"
+            type="button"
+            class="btn btn-outline-dark"
+          >
+            <i class="fa-solid fa-eraser"></i> clean files up selected
           </button>
         </div>
-        <table id="projectTable" style="table-layout: fixed">
-
-        </table>
+        <table id="projectTable" style="table-layout: fixed"></table>
       </div>
     </main>
   </body>

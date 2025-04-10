@@ -2,9 +2,11 @@ package main
 
 import (
 	"gitlab-package-file-manager/utils"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"fmt"
@@ -13,102 +15,97 @@ import (
 )
 
 type Project struct {
+	Description         string
 	ProjectId           int
 	ProjectName         string
 	ProjectAccessLevel  int
 	ProjectLink         string
-	PackageId           int
-	PackageName         string
-	PackageVersion      string
-	PackageLink         string
-	TotalPackageFiles   int
 	PackageRegistrySize int
 	CreatedAt           *time.Time
+	Owner               string
+	RepositorySize      int
 }
 
-type PackageFile struct {
-	ProjectId     int
-	PackageId     int
-	PackageFileId int
-	CreatedAt     *time.Time
+type Package struct {
+	PackageId        int
+	PackageFileCount int
+	PackageFileSize  int
+	PackageLink      string
+	PackageName      string
+	ProjectId        int
+	Version          string
 }
 
-func GetPackages(client *gitlab.Client, projectName string, packageName string, fromFileCount string, toFileCount string) []Project {
-
+func GetPackages(client *gitlab.Client, projectId int, limit int, offset int, criteria string, order string) ([]Package, int) {
+	log.Printf("project id: %v", projectId)
+	var total int
 	resultC := utils.New(func(inC chan interface{}) {
-		inC <- nil
-		close(inC)
-	}, client).Pipe(getProject, projectName).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
-		project := input.(Project)
-		packageName := options[0].(string)
 
-		var resultList []Project
-		_, resp, _ := client.Packages.ListProjectPackages(project.ProjectId, &gitlab.ListProjectPackagesOptions{
-			PackageName: &packageName,
+		packages, res, _ := client.Packages.ListProjectPackages(projectId, &gitlab.ListProjectPackagesOptions{
 			ListOptions: gitlab.ListOptions{
-				PerPage: 1,
+				PerPage: limit,
+				Page:    (offset / limit) + 1,
 			},
 		})
-		totalPackageCount := resp.TotalItems
-
-		from, _ := strconv.Atoi(fromFileCount)
-		to, err := strconv.Atoi(toFileCount)
-		if err != nil || to == 0 {
-			to = 9999
+		for _, _package := range packages {
+			inC <- _package
 		}
+		total = res.TotalItems
+		close(inC)
+	}, client).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
 
-		for i := range (totalPackageCount / 100) + 1 {
-			packages, _, _ := client.Packages.ListProjectPackages(project.ProjectId, &gitlab.ListProjectPackagesOptions{
-				PackageName: &packageName,
-				ListOptions: gitlab.ListOptions{
-					PerPage: 100,
-					Page:    i,
-				},
+		_packageInput := input.(*gitlab.Package)
+		var _packageOutput Package
+
+		_packageOutput.ProjectId = projectId
+		_packageOutput.PackageId = _packageInput.ID
+		_packageOutput.PackageName = _packageInput.Name
+		_packageOutput.PackageLink = strings.Join([]string{strings.ReplaceAll(client.BaseURL().String(), "/gitlab/api/v4/", ""), _packageInput.Links.WebPath}, "")
+		_packageOutput.Version = _packageInput.Version
+
+		hasNext := true
+		page := 1
+		for hasNext {
+			packageFiles, res, _ := client.Packages.ListPackageFiles(projectId, _packageInput.ID, &gitlab.ListPackageFilesOptions{
+				PerPage: 100,
+				Page:    page,
 			})
+			_packageOutput.PackageFileCount = res.TotalItems
 
-			for _, p := range packages {
-				_, resp, _ := client.Packages.ListPackageFiles(project.ProjectId, p.ID, &gitlab.ListPackageFilesOptions{
-					PerPage: 1,
-				})
-				if resp.TotalItems < from || resp.TotalItems > to {
-					continue
-				}
-
-				resultList = append(resultList, Project{
-					ProjectId:          project.ProjectId,
-					ProjectName:        project.ProjectName,
-					ProjectAccessLevel: project.ProjectAccessLevel,
-					ProjectLink:        project.ProjectLink,
-					PackageId:          p.ID,
-					PackageName:        p.Name,
-					PackageVersion:     p.Version,
-					PackageLink:        strings.Join([]string{strings.ReplaceAll(client.BaseURL().String(), "/gitlab/api/v4/", ""), p.Links.WebPath}, ""),
-					TotalPackageFiles:  resp.TotalItems,
-				})
+			for _, packageFile := range packageFiles {
+				_packageOutput.PackageFileSize += packageFile.Size
 			}
-		}
-		return resultList, nil
-	}, packageName).Merge()
 
-	var resultList []Project
+			if res.TotalPages == page {
+				hasNext = false
+			}
+			page++
+		}
+
+		_packageOutput.PackageFileSize = _packageOutput.PackageFileSize / 1024 / 1024
+		return _packageOutput, nil
+
+	}, "").Merge()
+
+	var resultList []Package
 	for result := range resultC {
-		if project, ok := result.(Project); ok {
-			resultList = append(resultList, project)
+		if _package, ok := result.(Package); ok {
+			resultList = append(resultList, _package)
 		}
 	}
 
-	return resultList
+	return resultList, total
 }
 
 func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 
 	resultC := utils.New(func(inC chan interface{}) {
-		for _, packageFile := range cleanupPackageFiles.([]PackageFile) {
+		for _, packageFile := range cleanupPackageFiles.([]Package) {
 			if packageFile.PackageId == 0 {
 				packageList, _, _ := client.Packages.ListProjectPackages(packageFile.ProjectId, nil, nil)
 
 				for _, info := range packageList {
-					inC <- PackageFile{
+					inC <- Package{
 						ProjectId: packageFile.ProjectId,
 						PackageId: info.ID,
 					}
@@ -119,8 +116,8 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 		}
 		close(inC)
 	}, client).Pipe(func(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
-		var filesToDelete []PackageFile
-		packageFile := input.(PackageFile)
+		var filesToDelete []map[string]interface{}
+		packageFile := input.(Package)
 		_, resp, _ := client.Packages.ListPackageFiles(packageFile.ProjectId, packageFile.PackageId, &gitlab.ListPackageFilesOptions{
 			PerPage: 1,
 		})
@@ -128,33 +125,33 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 		if totalItemCount < 20 {
 			return nil, nil
 		} else {
-			for i := 1; i <= (totalItemCount/100)+1; i++ {
+			for i := range (totalItemCount-1)/100 + 1 {
 				listPackageFiles, _, _ := client.Packages.ListPackageFiles(packageFile.ProjectId, packageFile.PackageId, &gitlab.ListPackageFilesOptions{
 					PerPage: 100,
-					Page:    i,
+					Page:    i + 1,
 				})
 				for _, _packageFile := range listPackageFiles {
 
-					filesToDelete = append(filesToDelete, PackageFile{
-						ProjectId:     packageFile.ProjectId,
-						PackageId:     packageFile.PackageId,
-						PackageFileId: _packageFile.ID,
-						CreatedAt:     _packageFile.CreatedAt,
+					filesToDelete = append(filesToDelete, map[string]interface{}{
+						"ProjectId":     packageFile.ProjectId,
+						"PackageId":     packageFile.PackageId,
+						"PackageFileId": _packageFile.ID,
+						"CreatedAt":     _packageFile.CreatedAt,
 					})
 				}
 			}
 			sort.Slice(filesToDelete, func(i, j int) bool {
-				return filesToDelete[i].CreatedAt.After(*filesToDelete[j].CreatedAt)
+				return filesToDelete[i]["CreatedAt"].(*time.Time).After(*filesToDelete[j]["CreatedAt"].(*time.Time))
 			})
 			return filesToDelete[20:], nil
 		}
 	}).Pipe(func(input interface{}, client *gitlab.Client, workerId int, a ...any) (interface{}, error) {
-		packageFile := input.(PackageFile)
+		packageFile := input.(map[string]interface{})
 
-		response, err := client.Packages.DeletePackageFile(packageFile.ProjectId, packageFile.PackageId, packageFile.PackageFileId)
+		response, err := client.Packages.DeletePackageFile(packageFile["ProjectId"], packageFile["PackageId"].(int), packageFile["PackageFileId"].(int))
 		if err != nil {
 			return fmt.Sprint("Project ID: %d, Package ID: %d, Package File ID: %d - Delete Failed: %v",
-				packageFile.ProjectId, packageFile.PackageId, packageFile.PackageFileId, err), err
+				packageFile["ProjectId"], packageFile["PackageId"], packageFile["PackageFileId"], err), err
 		} else {
 			return response, nil
 		}
@@ -173,93 +170,102 @@ func Clean(client *gitlab.Client, cleanupPackageFiles interface{}) []string {
 func GetProjects(client *gitlab.Client, projectName string, fromSize string, toSize string) []Project {
 	isStatistics := true
 
-	resultC := utils.New(func(inC chan interface{}) {
-		inC <- nil
-		close(inC)
-	}, client).Pipe(getProject, projectName).Pipe(func(input interface{}, client *gitlab.Client, workerId int, a ...any) (interface{}, error) {
-
-		project := input.(Project)
-		projectId := project.ProjectId
-		projectInfo, _, _ := client.Projects.GetProject(projectId, &gitlab.GetProjectOptions{
-			Statistics: &isStatistics,
-		})
-
-		from, _ := strconv.Atoi(fromSize)
-		to, err := strconv.Atoi(toSize)
-		if err != nil || to == 0 {
-			to = 999999
-		}
-		packageRegistrySize := int(projectInfo.Statistics.PackagesSize) / 1024 / 1024
-		if from <= packageRegistrySize && packageRegistrySize <= to {
-
-			project.PackageRegistrySize = packageRegistrySize
-
-			return project, nil
-		}
-
-		return nil, nil
-	}, "").Merge()
-
-	var resultList []Project
-	for result := range resultC {
-		if response, ok := result.(Project); ok {
-			resultList = append(resultList, response)
-		}
+	from, _ := strconv.Atoi(fromSize)
+	to, err := strconv.Atoi(toSize)
+	if err != nil || to == 0 {
+		to = 999999
 	}
-	return resultList
-}
 
-func getProject(input interface{}, client *gitlab.Client, workerId int, options ...any) (interface{}, error) {
-	projectName := options[0].(string)
 	var results []Project
 
-	_, resp, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
-		Search: &projectName,
-		ListOptions: gitlab.ListOptions{
-			PerPage: 1,
-			Page:    1,
-		},
-		MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
-	})
-	projectCount := resp.TotalItems
-
-	for i := range (projectCount / 100) + 1 {
-		result, _, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
+	_, resp, _ := client.Projects.ListProjects(
+		&gitlab.ListProjectsOptions{
 			Search: &projectName,
 			ListOptions: gitlab.ListOptions{
-				PerPage: 100,
-				Page:    i,
+				PerPage: 1,
+				Page:    1,
 			},
-			// Membership:     gitlab.Ptr(true),
 			MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
 		})
 
-		for _, p := range result {
-			accessLevel := func(project gitlab.Project) int {
-				accessLevel := 0
-				if project.Permissions == nil {
-					return accessLevel
-				}
+	totalPages := ((resp.TotalItems - 1) / 100) + 1
 
-				if project.Permissions.ProjectAccess != nil {
-					accessLevel = max(accessLevel, int(project.Permissions.ProjectAccess.AccessLevel))
-				}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
-				if project.Permissions.GroupAccess != nil {
-					accessLevel = max(accessLevel, int(project.Permissions.GroupAccess.AccessLevel))
-				}
+	for p := 1; p <= totalPages; p++ {
+		wg.Add(1)
+		go func(pageNum int) {
+			defer wg.Done()
+			opts := &gitlab.ListProjectsOptions{
+				Search: &projectName,
+				ListOptions: gitlab.ListOptions{
+					PerPage: 100,
+					Page:    pageNum,
+				},
+				Statistics:     &isStatistics,
+				MinAccessLevel: gitlab.Ptr(gitlab.AccessLevelValue(40)),
+			}
+			projects, _, err := client.Projects.ListProjects(opts)
+			if err != nil {
+				log.Printf("%d page request fail: %v", pageNum, err)
+				return
+			}
 
-				return accessLevel
+			filtered := processProjects(projects, from, to)
 
-			}(*p)
+			mu.Lock()
+			results = append(results, filtered...)
+			mu.Unlock()
+		}(p)
+	}
 
-			results = append(results, Project{
-				ProjectId:          p.ID,
-				ProjectName:        p.Name,
-				ProjectAccessLevel: accessLevel,
-				ProjectLink:        p.WebURL,
+	wg.Wait()
+	return results
+}
+
+func getAccessLevel(project gitlab.Project) int {
+	accessLevel := 0
+	if project.Permissions == nil {
+		return accessLevel
+	}
+
+	if project.Permissions.ProjectAccess != nil {
+		accessLevel = max(accessLevel, int(project.Permissions.ProjectAccess.AccessLevel))
+	}
+
+	if project.Permissions.GroupAccess != nil {
+		accessLevel = max(accessLevel, int(project.Permissions.GroupAccess.AccessLevel))
+	}
+	return accessLevel
+}
+
+func processProjects(projects []*gitlab.Project, from, to int) []Project {
+	var filtered []Project
+
+	for _, p := range projects {
+		accessLevel := getAccessLevel(*p)
+		packageRegistrySize := int(p.Statistics.PackagesSize) / 1024 / 1024
+
+		if from <= packageRegistrySize && packageRegistrySize <= to {
+			ownerName := ""
+			if p.Owner != nil {
+				ownerName = p.Owner.Username
+			}
+
+			filtered = append(filtered, Project{
+				ProjectId:           p.ID,
+				ProjectName:         p.Name,
+				ProjectAccessLevel:  accessLevel,
+				ProjectLink:         p.WebURL,
+				PackageRegistrySize: packageRegistrySize,
+				Description:         p.Description,
+				CreatedAt:           p.CreatedAt,
+				Owner:               ownerName,
+				RepositorySize:      int(p.Statistics.RepositorySize) / 1024 / 1024,
 			})
 		}
 	}
-	return results, nil
+
+	return filtered
 }
