@@ -9,9 +9,11 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo-contrib/session"
@@ -55,10 +57,6 @@ var clientStore = struct {
 }
 
 func main() {
-	// TODO DB Enable flag 처리
-
-	// dsn := "host=localhost user=postgres dbname=postgres port=5432 sslmode=disable TimeZone=Asia/Seoul"
-	// db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	port := flag.Int("port", 8080, "Web Port")
 	flag.Parse()
@@ -77,13 +75,13 @@ func main() {
 	}
 	e.Use(session.Middleware(store))
 
-	// CSRF 미들웨어 제거 또는 비활성화
+	// Configure CSRF Middleware
 	e.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup: "header:X-XSRF-TOKEN,form:X-XSRF-TOKEN",
-		CookieName:  "XSRF-TOKEN", // 쿠키에 저장되는 토큰 이름
+		CookieName:  "XSRF-TOKEN",
 	}))
 
-	// fs.FS에서 http.FileSystem으로 변환 (서브 디렉토리 사용 가능)
+	// set static file path using httpFs
 	staticFiles, _ := fs.Sub(staticFS, "static")
 	e.StaticFS("/static", staticFiles)
 
@@ -121,20 +119,6 @@ func main() {
 		})
 	})
 
-	e.GET("/statistics/packages", func(c echo.Context) error {
-		csrfToken := c.Get("csrf").(string)
-		_client := getClient(c)
-		if _client == nil {
-			return c.Redirect(http.StatusFound, "/")
-		}
-
-		return c.Render(http.StatusOK, "package.html", map[string]string{
-			"categoryNm": "statistics",
-			"menuNm":     "package",
-			"CsrfToken":  csrfToken,
-		})
-	})
-
 	// POST: Submit Login Form (token, url)
 	e.POST("/login", func(c echo.Context) error {
 		csrfToken := c.FormValue("X-XSRF-TOKEN")
@@ -149,8 +133,8 @@ func main() {
 			response.Message = "Gitlab API URL and Private Token should exist"
 			return c.Render(http.StatusOK, "login.html", response)
 		}
-
-		client, err := gitlab.NewClient(token, gitlab.WithBaseURL(baseUrl))
+		httpClient := newHTTPClient()
+		client, err := gitlab.NewClient(token, gitlab.WithBaseURL(baseUrl), gitlab.WithHTTPClient(httpClient))
 
 		if err != nil {
 			log.Printf("Client creation error: %v", err.Error())
@@ -163,7 +147,7 @@ func main() {
 			return c.Render(http.StatusUnauthorized, "login.html", response)
 		}
 
-		// 세션 가져오기
+		// load session
 		sess, err := session.Get("session", c)
 		if err != nil {
 			response.Message = "Session error: " + err.Error()
@@ -187,14 +171,14 @@ func main() {
 
 	e.POST("/logout", func(c echo.Context) error {
 
-		// 세션 가져오기
+		// load session
 		sess, err := session.Get("session", c)
 		if err != nil {
 			log.Printf("Session retrieval error: %v", err)
 			return c.Redirect(http.StatusFound, "/")
 		}
 
-		// 세션에 저장된 session_id를 통해 clientStore에서 삭제
+		// delete session in client store
 		sessionID, ok := sess.Values["session_id"].(string)
 		if ok && sessionID != "" {
 			clientStore.Lock()
@@ -202,7 +186,6 @@ func main() {
 			clientStore.Unlock()
 		}
 
-		// 세션을 삭제 (쿠키 삭제를 위해 MaxAge를 -1로 설정)
 		sess.Options.MaxAge = -1
 		if err := sess.Save(c.Request(), c.Response()); err != nil {
 			log.Printf("Session deletion error: %v", err)
@@ -219,10 +202,15 @@ func main() {
 		if _client != nil {
 
 			projectId, _ := strconv.Atoi(c.QueryParam("projectId"))
+			limit, _ := strconv.Atoi(c.QueryParam("limit"))
+			offset, _ := strconv.Atoi(c.QueryParam("offset"))
+			criteria := c.QueryParam("sort")
+			order := c.QueryParam("order")
 
-			packages := GetPackages(_client, projectId)
+			packages, total := GetPackages(_client, projectId, limit, offset, criteria, order)
 			return c.JSON(http.StatusOK, map[string]interface{}{
-				"data":      packages,
+				"rows":      packages,
+				"total":     total,
 				"message":   "Search Success",
 				"CsrfToken": csrfToken,
 			})
@@ -233,9 +221,6 @@ func main() {
 
 	e.GET("/projects", func(c echo.Context) error {
 
-		offset, _ := strconv.Atoi(c.QueryParam("offset"))
-		limit, _ := strconv.Atoi(c.QueryParam("limit"))
-
 		_client := getClient(c)
 
 		csrfToken := c.Get("csrf").(string)
@@ -245,7 +230,7 @@ func main() {
 			fromSize := c.FormValue("fromSize")
 			toSize := c.FormValue("toSize")
 
-			projects := GetProjects(_client, offset, limit, projectName, fromSize, toSize)
+			projects := GetProjects(_client, projectName, fromSize, toSize)
 
 			return c.JSON(http.StatusOK, map[string]interface{}{
 				"rows":      projects,
@@ -312,4 +297,21 @@ func generateSessionID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func newHTTPClient() *http.Client {
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second,
+	}
 }

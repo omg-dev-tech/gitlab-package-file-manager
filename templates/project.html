@@ -11,6 +11,8 @@
     <script>
       $(function () {
         var modal = new bootstrap.Modal($("#modal"), {});
+        var currentProjectId = null;
+
         $("#modal").on;
         $("#projectTable")
           .bootstrapTable({
@@ -98,31 +100,13 @@
             pagination: true,
           })
           .on("click", ".detail", function (e) {
-            $.ajax({
-              method: "GET",
-              url: "/packages?projectId=" + $(this).data("projectid"),
-              headers: {
-                "X-XSRF-TOKEN": "{{ .CsrfToken }}",
-              },
-            }).done(function (data, textStatus, jqXHR) {
-              // $("#modal").one("shown.bs.modal", function (e) {
-              //   autosize.update($("textarea"));
-              // });
-              if (data.data === null || data.data.length == 0) {
-                $("#packages").bootstrapTable("removeAll");
-                Swal.fire({
-                  title: "No Package",
-                  text: "Package does not exist",
-                  icon: "error",
-                  confirmButtonText: "OK",
-                });
-                modal.hide();
-              } else {
-                $("#packages").bootstrapTable("removeAll");
-                $("#packages").bootstrapTable("load", data.data);
-                modal.show();
-              }
-            });
+            e.preventDefault();
+            $("#packages").bootstrapTable("removeAll");
+            modal.show();
+            // 선택된 프로젝트의 ID를 저장
+            currentProjectId = $(this).data("projectid");
+            // packages 테이블을 refresh 시 query 파라미터로 자동 전달하도록 함
+            $("#packages").bootstrapTable("refresh");
           });
 
         $("#packages").bootstrapTable({
@@ -147,26 +131,63 @@
               formatter: function (value, row, index, field) {
                 return '<a href="' + row.PackageLink + '" >' + value + "</a>";
               },
-              sortable: true,
+              // sortable: true,
             },
             {
               title: "Package Version",
               field: "Version",
-              sortable: true,
+              // sortable: true,
             },
             {
               title: "Package File Count",
               field: "PackageFileCount",
-              sortable: true,
+              // sortable: true,
             },
             {
               title: "Package File Size (MB)",
               field: "PackageFileSize",
-              sortable: true,
+              // sortable: true,
             },
           ],
-          responseHandler: (res) => {
-            return res.data;
+          url: "/packages", // 서버의 URL로 변경 가능 (/packages 등)
+          method: "GET",
+          contentType: "application/json",
+          dataType: "json",
+          sidePagination: "server",
+          pagination: true,
+          pageList: [25],
+          pageSize: 25,
+          showRefresh: false,
+          sortOrder: "asc",
+          ajax: function (params) {
+            if (!currentProjectId) {
+              console.warn("projectId가 설정되지 않았습니다. 서버 호출 중단");
+              // projectId가 없으면 빈 결과를 반환해 테이블에 아무 데이터도 표시하지 않음
+              params.success({ total: 0, rows: [] });
+              return;
+            }
+            // projectId가 있으면, 기본 ajax 호출 실행 (혹은 jQuery.ajax 사용)
+            $.ajax({
+              url: params.url,
+              type: params.type,
+              data: params.data,
+              dataType: params.dataType,
+              success: function (res) {
+                params.success(res);
+              },
+              error: function (xhr) {
+                params.error(xhr);
+              },
+            });
+          },
+          queryParams: function (params) {
+            // bootstrap-table은 limit, offset 등의 기본 파라미터를 전달함
+            // 여기에 선택한 프로젝트의 ID를 추가함
+            if (currentProjectId) {
+              params.projectId = currentProjectId;
+            }
+
+            return params;
           },
         });
 
@@ -359,8 +380,15 @@
                       type="button"
                       class="btn btn-outline-dark"
                     >
-                    <i class="fa-solid fa-eraser"></i> Clean Selected
+                      <i class="fa-solid fa-eraser"></i> clean files up selected
                     </button>
+                    <!-- <button
+                      id="clean-modal-selected"
+                      type="button"
+                      class="btn btn-outline-dark"
+                    >
+                      <i class="fa-solid fa-trash"></i> delete selected packages
+                    </button> -->
                   </div>
                   <div class="mb-3 col-12">
                     <table id="packages"></table>
@@ -419,10 +447,14 @@
       <div class="container-fluid">
         <div id="toolbar" class="w-100">
           <button id="search" type="button" class="btn btn-outline-dark">
-            <i class="fa-solid fa-magnifying-glass"></i> Search
+            <i class="fa-solid fa-magnifying-glass"></i> search
           </button>
-          <button id="clean-selected" type="button" class="btn btn-outline-dark">
-            <i class="fa-solid fa-eraser"></i> Clean Selected
+          <button
+            id="clean-selected"
+            type="button"
+            class="btn btn-outline-dark"
+          >
+            <i class="fa-solid fa-eraser"></i> clean files up selected
           </button>
         </div>
         <table id="projectTable" style="table-layout: fixed"></table>
